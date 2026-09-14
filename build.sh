@@ -25,7 +25,7 @@ else
 fi
 
 # run-parts only runs executable files; make sure the hooks carry the bit.
-chmod +x app/init/*.sh
+chmod +x app/init/nospy-*
 
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"

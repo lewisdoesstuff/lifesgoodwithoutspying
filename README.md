@@ -17,6 +17,8 @@ TVs: ad delivery, Automatic Content Recognition, and always-on voice capture.
 - Stops the on-TV ad services (`admanager`, `adoverlay`, `livepick`).
 - Stops the LG voice services (`voiceinput`, `voiceconductor`).
 - Re-checks those kills every minute, since the TV respawns them.
+- Optionally swaps `/usr/sbin/upnpd` for an inert stub, killing UPnP
+  discovery both ways (breaks casting to the TV too).
 - Wipes locally buffered ACR / speech-to-text files.
 - Re-applies everything at boot through a Homebrew Channel `init.d` hook.
 

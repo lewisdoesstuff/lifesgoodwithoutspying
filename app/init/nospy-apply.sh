@@ -148,18 +148,31 @@ apply_ads() {
 # LAN discovery (ssdp/upnp)
 apply_lan() {
     if ! is_on lan.block; then
+        # put the real binary back if ours is mounted
+        if head -n 1 /usr/sbin/upnpd 2>/dev/null | grep -q 'nospy-upnpd-stub'; then
+            if umount /usr/sbin/upnpd 2>/dev/null || umount -l /usr/sbin/upnpd 2>/dev/null; then
+                echo "[+] restored /usr/sbin/upnpd"
+            fi
+        fi
         return 0
     fi
-    killed=0
-    for pat in ssdp upnp; do
-        if pkill -f "$pat" 2>/dev/null; then
-            killed=1
+    if [ ! -f /usr/sbin/upnpd ]; then
+        echo "[-] /usr/sbin/upnpd not found; skipping lan block"
+        return 1
+    fi
+    if ! head -n 1 /usr/sbin/upnpd 2>/dev/null | grep -q 'nospy-upnpd-stub'; then
+        if mount --bind "$DIR/nospy-upnpd-stub" /usr/sbin/upnpd; then
+            echo "[+] stubbed /usr/sbin/upnpd"
+        else
+            echo "[-] failed to stub /usr/sbin/upnpd"
+            return 1
         fi
-    done
-    if [ "$killed" -eq 1 ]; then
-        echo "[+] stopped LAN discovery (ssdp/upnp) process(es)"
     else
-        echo "[~] lan.block on but no matching processes found"
+        echo "[~] upnpd stub already mounted"
+    fi
+    # mount first, then kill: anything forked after this gets the stub
+    if pkill -9 upnpd 2>/dev/null; then
+        echo "[+] killed running upnpd"
     fi
 }
 

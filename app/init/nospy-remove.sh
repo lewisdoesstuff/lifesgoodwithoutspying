@@ -22,4 +22,10 @@ else
     echo "[~] /etc/hosts was not overridden"
 fi
 
+if head -n 1 /usr/sbin/upnpd 2>/dev/null | grep -q 'nospy-upnpd-stub'; then
+    if umount /usr/sbin/upnpd 2>/dev/null || umount -l /usr/sbin/upnpd 2>/dev/null; then
+        echo "[+] restored /usr/sbin/upnpd"
+    fi
+fi
+
 echo "==== done ===="
