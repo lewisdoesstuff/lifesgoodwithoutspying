@@ -1,0 +1,10 @@
+# LG Ad Solutions / Alphonso - Automatic Content Recognition. Toggle: domains.acr
+alphonso.tv
+acrdb.alphonso.tv
+ads.alphonso.tv
+api.alphonso.tv
+bl-server.alphonso.tv
+clockskew.alphonso.tv
+prov-lg.alphonso.tv
+ad-inserter.alphonso.tv
+config-overlay-ads.alphonso.tv

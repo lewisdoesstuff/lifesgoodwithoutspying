@@ -1,0 +1,13 @@
+# LG SmartAd / ad delivery + ad platform. Toggle: domains.smartad
+ad.lgappstv.com
+ad.lgsmartad.com
+info.lgsmartad.com
+info.lgsmartad.net
+us.ad.lgsmartad.com
+us.info.lgsmartad.com
+us.ibs.lgappstv.com
+ibs.lgappstv.com
+ibsstat.lgappstv.com
+us.emp.lgsmartplatform.com
+us.lgeapi.com
+www.ueiwsp.com

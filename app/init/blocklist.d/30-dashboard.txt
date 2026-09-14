@@ -1,0 +1,11 @@
+# LG ACR / recommendations / home dashboard. Toggle: domains.dashboard
+recommend.lgtvcommon.com
+service.lgtvcommon.com
+homeprv.lgtvcommon.com
+nudge.lgtvcommon.com
+rdl.lgtvcommon.com
+cdplauncher.lgtvcommon.com
+cdpbeacon.lgtvcommon.com
+cdpsvc.lgtvcommon.com
+rdx2.lgtvsdp.com
+us.rdx2.lgtvsdp.com

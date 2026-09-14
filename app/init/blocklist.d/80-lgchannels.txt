@@ -1,0 +1,4 @@
+# LG Channels / Pluto TV plumbing. Toggle: domains.lgchannels
+# Blocking these stops channel-name DNS leakage but breaks the LG Channels app.
+sp.pluto.tv
+tags.tiqcdn.com

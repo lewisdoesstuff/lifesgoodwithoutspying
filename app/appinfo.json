@@ -1,0 +1,11 @@
+{
+  "id": "ooo.lew.lifesgoodwithoutspying",
+  "version": "0.2.1",
+  "vendor": "lew",
+  "type": "web",
+  "main": "index.html",
+  "title": "Life's Good Without Spying",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "resolution": "1920x1080"
+}

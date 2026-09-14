@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Life's Good Without Spying</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <main class="app" id="app">
+    <header class="masthead">
+      <h1>Life's Good Without Spying</h1>
+      <div class="device"><span class="tag" id="dev-root">checking</span></div>
+    </header>
+
+    <section class="hero">
+      <div class="signal" aria-hidden="true"><span class="bars"></span><span class="scan"></span></div>
+
+      <p class="verdict" id="verdict">Checking…</p>
+      <p class="explain" id="explain">Reading the TV's state.</p>
+
+      <button id="btn-main" class="primary" autofocus>Enable protection</button>
+
+      <dl class="readout">
+        <div><dt>Domains blocked</dt><dd id="r-domains">—</dd></div>
+        <div><dt>Domain sink</dt><dd id="r-hosts">—</dd></div>
+        <div><dt>Voice services</dt><dd id="r-voice">—</dd></div>
+        <div><dt>Ad services</dt><dd id="r-ads">—</dd></div>
+      </dl>
+    </section>
+
+    <section class="tools">
+      <button id="btn-purge">Purge now</button>
+      <button id="btn-selftest">Self-test</button>
+      <button id="btn-refresh">Refresh</button>
+      <button id="btn-log">Show log</button>
+    </section>
+
+    <section class="stage">
+      <section class="layers" id="layers">
+        <h2>Protections</h2>
+        <div class="layer-grid">
+          <button class="layer" data-key="domains.acr" role="switch" aria-checked="false">
+            <span class="sw" aria-hidden="true"></span>
+            <span class="layer-text"><b>ACR / Alphonso</b><small>Blocks automatic content-recognition uploads</small></span>
+          </button>
+          <button class="layer" data-key="domains.smartad" role="switch" aria-checked="false">
+            <span class="sw" aria-hidden="true"></span>
+            <span class="layer-text"><b>SmartAd &amp; ad platform</b><small>Blocks ad delivery and tracking</small></span>
+          </button>
+          <button class="layer" data-key="domains.dashboard" role="switch" aria-checked="false">
+            <span class="sw" aria-hidden="true"></span>
+            <span class="layer-text"><b>Home dashboard &amp; recs</b><small>Blocks recommendation telemetry</small></span>
+          </button>
+          <button class="layer" data-key="voice.stop" role="switch" aria-checked="false">
+            <span class="sw" aria-hidden="true"></span>
+            <span class="layer-text"><b>Voice services</b><small>Stops LG mic and wake-word services (Breaks remote voice key)</small></span>
+          </button>
+          <button class="layer" data-key="ads.stop" role="switch" aria-checked="false">
+            <span class="sw" aria-hidden="true"></span>
+            <span class="layer-text"><b>Ad services</b><small>Stops admanager, adoverlay, livepick</small></span>
+          </button>
+          <button class="layer" data-key="lan.block" role="switch" aria-checked="false">
+            <span class="sw" aria-hidden="true"></span>
+            <span class="layer-text"><b>LAN discovery</b><small>Block LAN discovery. May break casting</small></span>
+          </button>
+          <button class="layer" data-key="purge.boot" role="switch" aria-checked="false">
+            <span class="sw" aria-hidden="true"></span>
+            <span class="layer-text"><b>Purge on boot</b><small>Clear ACR and voice data at startup</small></span>
+          </button>
+          <button class="layer" data-key="domains.lgchannels" role="switch" aria-checked="false">
+            <span class="sw" aria-hidden="true"></span>
+            <span class="layer-text"><b>LG Channels</b><small>Optional. breaks the LG Channels app</small></span>
+          </button>
+          <button class="layer" data-key="domains.updates" role="switch" aria-checked="false">
+            <span class="sw" aria-hidden="true"></span>
+            <span class="layer-text"><b>Firmware updates</b><small>Optional. Blocks updates and fixes. <br /> Can be handled by the Homebrew Channel</small></span>
+          </button>
+        </div>
+      </section>
+
+      <section class="console" id="console" hidden>
+        <pre id="out"></pre>
+      </section>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

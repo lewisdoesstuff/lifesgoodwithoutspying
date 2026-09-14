@@ -1,0 +1,8 @@
+# LG firmware update servers. Toggle: domains.updates
+# Possibly already handled by the Homebrew Channel
+# Blocks any updates (including security patches)
+# But you're rooted, so that's probably for the best ;)
+snu.lge.com
+su.lge.com
+su-ssl.lge.com
+su-dev.lge.com
