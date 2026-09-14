@@ -1,5 +1,7 @@
 # Life's Good Without Spying
 
+[![build](https://github.com/lewisdoesstuff/lifesgoodwithoutspying/actions/workflows/build.yml/badge.svg)](https://github.com/lewisdoesstuff/lifesgoodwithoutspying/actions/workflows/build.yml)
+
 A webOS homebrew app that switches off the surveillance stack on rooted LG
 TVs: ad delivery, Automatic Content Recognition, and always-on voice capture.
 
