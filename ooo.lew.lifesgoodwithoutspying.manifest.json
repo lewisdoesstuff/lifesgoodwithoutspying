@@ -1,6 +1,6 @@
 {
   "id": "ooo.lew.lifesgoodwithoutspying",
-  "version": "0.2.6",
+  "version": "0.2.8",
   "type": "web",
   "title": "Life's Good Without Spying",
   "appDescription": "Switches off LG TV surveillance: ad delivery, ACR and always-on voice capture.",
@@ -9,6 +9,6 @@
   "rootRequired": true,
   "ipkUrl": "https://github.com/lewisdoesstuff/lifesgoodwithoutspying/releases/latest/download/ooo.lew.lifesgoodwithoutspying.ipk",
   "ipkHash": {
-    "sha256": "22e91f2099c7e95c45908228f8ab778016d74c9773b61e1aae02b462a78e3552"
+    "sha256": "ed6ca340bf6b0d984b5d970efea140d338340bf0438129c1e47839fbc109fbbc"
   }
 }
