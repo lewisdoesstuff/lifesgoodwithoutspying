@@ -149,7 +149,7 @@ apply_ads() {
 apply_lan() {
     if ! is_on lan.block; then
         # put the real binary back if ours is mounted
-        if head -n 1 /usr/sbin/upnpd 2>/dev/null | grep -q 'nospy-upnpd-stub'; then
+        if head -n 2 /usr/sbin/upnpd 2>/dev/null | grep -q 'nospy-upnpd-stub'; then
             if umount /usr/sbin/upnpd 2>/dev/null || umount -l /usr/sbin/upnpd 2>/dev/null; then
                 echo "[+] restored /usr/sbin/upnpd"
             fi
@@ -160,7 +160,7 @@ apply_lan() {
         echo "[-] /usr/sbin/upnpd not found; skipping lan block"
         return 1
     fi
-    if ! head -n 1 /usr/sbin/upnpd 2>/dev/null | grep -q 'nospy-upnpd-stub'; then
+    if ! head -n 2 /usr/sbin/upnpd 2>/dev/null | grep -q 'nospy-upnpd-stub'; then
         if mount --bind "$DIR/nospy-upnpd-stub" /usr/sbin/upnpd; then
             echo "[+] stubbed /usr/sbin/upnpd"
         else
