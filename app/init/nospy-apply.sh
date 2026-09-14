@@ -98,6 +98,12 @@ apply_hosts() {
 apply_voice() {
     if ! is_on voice.stop; then
         echo "[~] voice.stop disabled"
+        # toggling back on means voice should work again
+        if command -v systemctl >/dev/null 2>&1; then
+            if systemctl start voiceinput voiceconductor >/dev/null 2>&1; then
+                echo "[+] restarted voice units"
+            fi
+        fi
         return 0
     fi
 
@@ -189,5 +195,6 @@ apply_voice
 apply_ads
 apply_lan
 apply_purge
+watch_ensure
 
 echo "==== done ===="

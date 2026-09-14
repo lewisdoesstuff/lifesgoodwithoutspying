@@ -111,3 +111,31 @@ bounded() {
         "$@"
     fi
 }
+
+# True if our watcher loop is currently running.
+watch_running() {
+    ps aux 2>/dev/null | grep -q '[n]ospy-watch\.sh'
+}
+
+# (Re)start the watcher if either kill-toggle is on. Silent when already up.
+watch_ensure() {
+    if ! is_on voice.stop && ! is_on ads.stop; then
+        return 0
+    fi
+    if watch_running; then
+        return 0
+    fi
+    # Detach fully: ignore HUP so that closing the ssh session (or the HBC
+    # exec call) that started us doesn't take the loop down too.
+    (trap '' HUP; sh "$DIR/nospy-watch.sh" >/dev/null 2>&1 < /dev/null &) 2>/dev/null
+    echo "[+] started nospy-watch"
+}
+
+# Stop the watcher, if running.
+watch_stop() {
+    if watch_running; then
+        pkill -f '[n]ospy-watch\.sh' 2>/dev/null
+        echo "[+] stopped nospy-watch"
+    fi
+    return 0
+}

@@ -9,3 +9,5 @@ cdpbeacon.lgtvcommon.com
 cdpsvc.lgtvcommon.com
 rdx2.lgtvsdp.com
 us.rdx2.lgtvsdp.com
+# livepick (LG's ACR shopping nudge) reports to TheTake
+thetake.com

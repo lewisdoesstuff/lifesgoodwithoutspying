@@ -56,6 +56,7 @@ case "$1" in
     disable)
         rm -f "$LINK"
         "$REMOVE"
+        watch_stop
         echo "autostart=off"
         ;;
     apply)
@@ -93,6 +94,7 @@ case "$1" in
         fi
         echo "hosts=$(hosts_state)"
         echo "blocklist=$(blocklist_count)"
+        echo "watch=$(watch_running && echo on || echo off)"
         conf_keys > "$TMP"
         while IFS= read -r key; do
             echo "$key=$(conf_get "$key")"
