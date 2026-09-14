@@ -9,7 +9,7 @@ DIR="$(dirname "$(realpath "$0")")"
 
 while :; do
     sleep 60
-    if ! is_on voice.stop && ! is_on ads.stop; then
+    if ! is_on voice.stop && ! is_on ads.stop && ! is_on lan.block; then
         exit 0
     fi
     if is_on voice.stop; then
@@ -23,6 +23,11 @@ while :; do
     fi
     if is_on ads.stop; then
         for proc in admanager adoverlay livepick; do
+            pkill -9 "$proc" 2>/dev/null
+        done
+    fi
+    if is_on lan.block; then
+        for proc in upnpd ssdp; do
             pkill -9 "$proc" 2>/dev/null
         done
     fi

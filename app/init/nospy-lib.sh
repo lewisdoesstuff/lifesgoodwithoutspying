@@ -117,9 +117,9 @@ watch_running() {
     ps aux 2>/dev/null | grep -q '[n]ospy-watch\.sh'
 }
 
-# (Re)start the watcher if either kill-toggle is on. Silent when already up.
+# (Re)start the watcher if any kill-toggle is on. Silent when already up.
 watch_ensure() {
-    if ! is_on voice.stop && ! is_on ads.stop; then
+    if ! is_on voice.stop && ! is_on ads.stop && ! is_on lan.block; then
         return 0
     fi
     if watch_running; then
