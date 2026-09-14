@@ -1,0 +1,19 @@
+<h1>Life's Good Without Spying</h1>
+<p>Switches off the surveillance stack on rooted LG TVs: ad delivery,
+Automatic Content Recognition, and always-on voice capture.</p>
+<h2>What it does</h2>
+<ul>
+<li>Sinks LG ad, ACR and telemetry domains to loopback, per category.</li>
+<li>Stops the on-TV ad services (admanager, adoverlay, livepick).</li>
+<li>Stops the LG voice services (voiceinput, voiceconductor).</li>
+<li>Wipes locally buffered ACR and speech-to-text residue.</li>
+<li>Re-applies everything at boot.</li>
+</ul>
+<p>Everything is a runtime change. Nothing writes to the signed system
+partitions. Disabling the app, or removing it and rebooting, restores the
+stock setup. Requires a rooted TV with the Homebrew Channel.</p>
+<h2>Use</h2>
+<p>The headline shows the state. Each protection flips individually, the main
+button cycles Enable, Update and Disable, and Self-test proves it on the
+device: blocked names resolve to loopback, outbound connects fail, voice
+and ad services are down.</p>
