@@ -123,7 +123,9 @@ case "$1" in
         printf "  %-30s %s\n" "lgtvonline.lge.com (control)" "$(getent hosts lgtvonline.lge.com 2>/dev/null | awk '{print $1}' | head -1)"
         echo
         echo "== outbound to a blocked host (should fail) =="
-        code="$(curl -s -m 5 -o /dev/null -w '%{http_code}' https://ad.lgsmartad.com/ 2>/dev/null)"
+        # -4: this build's curl stalls on dual-stack dials to the sinkhole,
+        # so pin IPv4. Tests the same thing: the name goes nowhere.
+        code="$(curl -4 -s --connect-timeout 3 -m 5 -o /dev/null -w '%{http_code}' https://ad.lgsmartad.com/ 2>/dev/null)"
         rc=$?
         echo "  ad.lgsmartad.com  http=${code:-none}  curl_rc=$rc"
         echo
@@ -135,7 +137,7 @@ case "$1" in
         fi
         echo
         echo "== ACR / ad services present on the bus =="
-        ls-monitor -l 2>/dev/null | grep -iE 'service\.acr|livepick|colorInfoMiner|admanager|adoverlay|tvdataexchang' || echo "  (none)"
+        ls-monitor -l 2>/dev/null | grep -iE 'service\.acr|service\.livepick|colorInfoMiner|service\.admanager|service\.adoverlay|service\.tvdataexchang' || echo "  (none)"
         echo
         echo "== buffered ACR / voice residue files =="
         find /var/log /tmp /var/run -maxdepth 3 -type f \
