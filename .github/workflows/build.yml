@@ -43,28 +43,19 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
       - uses: actions/download-artifact@v4
         with:
           name: ipk
           path: dist
 
-      - name: Generate manifest and stable asset names
-        run: |
-          IPK=$(ls dist/*.ipk)
-          ID=$(node -e "console.log(JSON.parse(require('fs').readFileSync('app/appinfo.json')).id)")
-          node scripts/gen-manifest.js "$IPK" > "dist/${ID}.manifest.json"
-          cp "$IPK" "dist/${ID}.ipk"
-          cat "dist/${ID}.manifest.json"
-
+      # Stable asset name; the manifest (committed in-repo) points at
+      # releases/latest/download/<this name>. The manifest itself is
+      # generated locally per release with scripts/gen-manifest.js - CI
+      # can't do it, since the hash must describe these exact bytes and
+      # the file has to live on raw.githubusercontent for CORS.
       - name: Publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ID=$(node -e "console.log(JSON.parse(require('fs').readFileSync('app/appinfo.json')).id)")
-          gh release create "${{ github.ref_name }}" "dist/${ID}.ipk" "dist/${ID}.manifest.json" --title "${{ github.ref_name }}" --generate-notes
+          cp dist/*.ipk dist/ooo.lew.lifesgoodwithoutspying.ipk
+          gh release create "${{ github.ref_name }}" dist/ooo.lew.lifesgoodwithoutspying.ipk --title "${{ github.ref_name }}" --generate-notes
