@@ -16,6 +16,7 @@ TVs: ad delivery, Automatic Content Recognition, and always-on voice capture.
   generated `/etc/hosts` (per-category toggles).
 - Stops the on-TV ad services (`admanager`, `adoverlay`, `livepick`).
 - Stops the LG voice services (`voiceinput`, `voiceconductor`).
+- Re-checks those kills every minute, since the TV respawns them.
 - Wipes locally buffered ACR / speech-to-text files.
 - Re-applies everything at boot through a Homebrew Channel `init.d` hook.
 

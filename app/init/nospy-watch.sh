@@ -1,11 +1,6 @@
 #!/bin/sh
 # Re-assert the voice/ad kills every minute while their toggles are on.
 #
-# Why this exists: voiceinput_network and admanager are forked on demand by
-# ls-hubd (the Luna bus hub) whenever any client calls them, so a one-shot
-# kill only lasts until the next caller. The domain sink remains the durable
-# network block; this keeps the processes themselves down too.
-#
 # Started detached by nospy-apply.sh. Exits by itself once both toggles are
 # off. Silent; check `watch=` in nospy-ctl.sh status.
 
