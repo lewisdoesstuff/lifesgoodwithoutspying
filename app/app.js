@@ -221,18 +221,18 @@
             setTag('rooted', 'ok');
             if (!enabled) {
                 verdict.textContent = 'Not protected';
-                explain.textContent = 'This TV can still send viewing, ad and voice data.';
+                explain.textContent = 'This TV can still send viewing, ad, and voice data.';
                 verdict.classList.add('is-danger');
             }
             else if (dirty) {
                 verdict.textContent = 'Changes pending';
-                explain.textContent = 'Your settings changed. Apply them to re-assert every protection.';
+                explain.textContent = 'Your settings changed. Select "Update protection" to apply them.';
                 verdict.classList.add('is-warn');
                 appEl.classList.add('secured', 'pending');
             }
             else {
                 verdict.textContent = 'Protected';
-                explain.textContent = 'Viewing, ad and voice data are not leaving the TV.';
+                explain.textContent = 'Viewing, ad, and voice data are blocked.';
                 verdict.classList.add('is-secure');
                 appEl.classList.add('secured');
             }
