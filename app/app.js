@@ -105,53 +105,6 @@
             return exec('sh ' + shq(dir + '/init/nospy-ctl.sh') + ' ' + action);
         });
     }
-    // run a command and stream the output
-    function spawn(command, onChunk) {
-        return new Promise(function (resolve, reject) {
-            var Bridge = window.PalmServiceBridge;
-            if (typeof Bridge !== 'function') {
-                exec(command).then(resolve, reject);
-                return;
-            }
-            var bridge = new Bridge();
-            var settled = false;
-            bridge.onservicecallback = function (msg) {
-                var data;
-                try {
-                    data = JSON.parse(msg);
-                }
-                catch (e) {
-                    return;
-                }
-                if (data.returnValue === false) {
-                    if (!settled) {
-                        settled = true;
-                        reject(new Error(data.errorText || 'spawn failed'));
-                    }
-                    return;
-                }
-                if (data.stdoutString)
-                    onChunk(data.stdoutString);
-                if (data.stderrString)
-                    onChunk(data.stderrString);
-                if (data.event === 'close' || data.event === 'exit') {
-                    if (!settled) {
-                        settled = true;
-                        resolve(data);
-                    }
-                }
-            };
-            try {
-                bridge.call(HBC + '/spawn', JSON.stringify({ command: command }));
-            }
-            catch (e) {
-                if (!settled) {
-                    settled = true;
-                    reject(e);
-                }
-            }
-        });
-    }
     function parseStatus(text) {
         var map = {};
         (text || '').split('\n').forEach(function (line) {
@@ -328,17 +281,7 @@
     });
     document.getElementById('btn-selftest').addEventListener('click', function () {
         showConsole(true);
-        busy(true);
-        log('> Self-test');
-        getFolder()
-            .then(function (dir) {
-            return spawn('sh ' + shq(dir + '/init/nospy-ctl.sh') + ' selftest', function (chunk) {
-                out.textContent = (out.textContent || '') + chunk;
-                consoleEl.scrollTop = consoleEl.scrollHeight;
-            });
-        })
-            .catch(function (e) { log('! ' + errmsg(e)); })
-            .then(function () { busy(false); });
+        run('Self-test', function () { return ctl('selftest'); });
     });
     document.getElementById('btn-refresh').addEventListener('click', function () {
         run('Refresh', refresh);
