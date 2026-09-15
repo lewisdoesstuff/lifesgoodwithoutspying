@@ -6,7 +6,7 @@
       "shortDescription": "<p>Switches off LG TV surveillance: ads, ACR and voice capture.</p>",
       "fullDescriptionUrl": "https://raw.githubusercontent.com/lewisdoesstuff/lifesgoodwithoutspying/main/description.html",
       "iconUri": "https://raw.githubusercontent.com/lewisdoesstuff/lifesgoodwithoutspying/main/app/largeIcon.png",
-      "manifestUrl": "https://raw.githubusercontent.com/lewisdoesstuff/lifesgoodwithoutspying/main/ooo.lew.lifesgoodwithoutspying.manifest.json"
+      "manifestUrl": "https://github.com/lewisdoesstuff/lifesgoodwithoutspying/releases/latest/download/ooo.lew.lifesgoodwithoutspying.manifest.json"
     }
   ]
 }

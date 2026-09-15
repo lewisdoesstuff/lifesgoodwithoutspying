@@ -48,21 +48,33 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - uses: actions/download-artifact@v4
         with:
           name: ipk
           path: dist
 
-      # Stable asset name; the manifest (committed in-repo) points at
-      # releases/latest/download/<this name>.
+      # The manifest must describe these exact bytes, so generate it here
+      # from the built artifact (a committed copy would go stale every build).
+      - name: Generate manifest and stable asset names
+        run: |
+          IPK=$(ls dist/*.ipk)
+          ID=$(node -e "console.log(JSON.parse(require('fs').readFileSync('app/appinfo.json')).id)")
+          node scripts/gen-manifest.js "$IPK" > "dist/${ID}.manifest.json"
+          cp "$IPK" "dist/${ID}.ipk"
+          cat "dist/${ID}.manifest.json"
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ls -la dist/
-          cp dist/*.ipk dist/ooo.lew.lifesgoodwithoutspying.ipk
+          ID=$(node -e "console.log(JSON.parse(require('fs').readFileSync('app/appinfo.json')).id)")
           if gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
-            gh release upload "${{ github.ref_name }}" dist/ooo.lew.lifesgoodwithoutspying.ipk --clobber
+            gh release upload "${{ github.ref_name }}" "dist/${ID}.ipk" "dist/${ID}.manifest.json" --clobber
           else
-            gh release create "${{ github.ref_name }}" dist/ooo.lew.lifesgoodwithoutspying.ipk --title "${{ github.ref_name }}" --generate-notes
+            gh release create "${{ github.ref_name }}" "dist/${ID}.ipk" "dist/${ID}.manifest.json" --title "${{ github.ref_name }}" --generate-notes
           fi
