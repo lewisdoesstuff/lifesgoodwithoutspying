@@ -1,0 +1,56 @@
+# LG ThinQ / IoT / companion app + second screen. Toggle: domains.thinq
+#
+# Off by default: blocking these breaks the LG ThinQ mobile app, TV<->phone
+# pairing and the smart-home / IoT integration.
+lgtviot.com
+api.lgtviot.com
+ocp.lgtviot.com
+eic-ocp.lgtviot.com
+commonpush.lgtviot.com
+push.lgtviot.com
+sports.lgtviot.com
+aic.sports.lgtviot.com
+buddy.lgtviot.com
+aic.api.lgtviot.com
+eic.api.lgtviot.com
+kic.api.lgtviot.com
+ruc.api.lgtviot.com
+qt2-kic.lgtviot.com
+lgthinq.com
+common.lgthinq.com
+lss.lgthinq.com
+noti.lgthinq.com
+connect-client.lgthinq.com
+eic-connect-client.lgthinq.com
+prd-api.lgthinq.com
+eic-common.lgthinq.com
+eic-iotservice.lgthinq.com
+eic-service.lgthinq.com
+# Regional IoT / ThinQ hosts (verified resolving 2026-09-16)
+aic-common.lgthinq.com
+aic-connect-client.lgthinq.com
+aic-iotservice.lgthinq.com
+aic-ocp.lgtviot.com
+aic-op-lss.lgthinq.com
+aic-service.lgthinq.com
+aic.commonpush.lgtviot.com
+aic.push.lgtviot.com
+eic-op-lss.lgthinq.com
+eic.commonpush.lgtviot.com
+eic.push.lgtviot.com
+eic.sports.lgtviot.com
+it-service.lgthinq.com
+kic-common.lgthinq.com
+kic-connect-client.lgthinq.com
+kic-iotservice.lgthinq.com
+kic-ocp.lgtviot.com
+kic-op-lss.lgthinq.com
+kic-service.lgthinq.com
+kic.buddy.lgtviot.com
+kic.commonpush.lgtviot.com
+kic.push.lgtviot.com
+kic.sports.lgtviot.com
+ruc-op-lss.lgthinq.com
+ruc.commonpush.lgtviot.com
+ruc.push.lgtviot.com
+ruc.sports.lgtviot.com

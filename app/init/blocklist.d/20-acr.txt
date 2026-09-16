@@ -8,3 +8,5 @@ clockskew.alphonso.tv
 prov-lg.alphonso.tv
 ad-inserter.alphonso.tv
 config-overlay-ads.alphonso.tv
+# LG Ad Solutions (Alphonso Inc.) current brand
+lgads.tv

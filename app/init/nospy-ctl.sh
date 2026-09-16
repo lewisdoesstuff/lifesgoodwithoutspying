@@ -54,9 +54,11 @@ case "$1" in
         echo "autostart=on"
         ;;
     disable)
+        # stop the watcher first: nospy-remove.sh restores the services the
+        # kill-toggles stopped, and the watcher would just re-kill them.
+        watch_stop
         rm -f "$LINK"
         "$REMOVE"
-        watch_stop
         echo "autostart=off"
         ;;
     apply)

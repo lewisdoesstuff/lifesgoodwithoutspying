@@ -2,3 +2,11 @@
 # Blocking these stops channel-name DNS leakage but breaks the LG Channels app.
 sp.pluto.tv
 tags.tiqcdn.com
+# Pluto/Xumo backend and the LG Channels home app
+app-lgwebos.pluto.tv
+lgchhomeapp.lgtvcommon.com
+eic.lgchhomeapp.lgtvcommon.com
+lg-channelplus-eu-beacons.xumo.com
+lg-channelplus-eu-mds.xumo.com
+bss.lgechannel.com
+lgechannel.com

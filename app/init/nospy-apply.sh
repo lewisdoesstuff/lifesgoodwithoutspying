@@ -99,11 +99,7 @@ apply_voice() {
     if ! is_on voice.stop; then
         echo "[~] voice.stop disabled"
         # toggling back on means voice should work again
-        if command -v systemctl >/dev/null 2>&1; then
-            if systemctl start voiceinput voiceconductor >/dev/null 2>&1; then
-                echo "[+] restarted voice units"
-            fi
-        fi
+        voice_restore
         return 0
     fi
 
@@ -129,6 +125,10 @@ apply_voice() {
 # Ad services
 apply_ads() {
     if ! is_on ads.stop; then
+        # livepick is a unit; admanager/adoverlay respawn on their own
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl start livepick >/dev/null 2>&1 || true
+        fi
         return 0
     fi
     stopped=0
@@ -152,6 +152,9 @@ apply_lan() {
         if head -n 2 /usr/sbin/upnpd 2>/dev/null | grep -q 'nospy-upnpd-stub'; then
             if umount /usr/sbin/upnpd 2>/dev/null || umount -l /usr/sbin/upnpd 2>/dev/null; then
                 echo "[+] restored /usr/sbin/upnpd"
+                # we had been blocking, so bring the discovery daemons back up
+                ssdp_restore
+                upnp_restore
             fi
         fi
         return 0

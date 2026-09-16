@@ -28,4 +28,8 @@ if head -n 2 /usr/sbin/upnpd 2>/dev/null | grep -q 'nospy-upnpd-stub'; then
     fi
 fi
 
+# apply turns services off; disabling protection should turn them back on, or
+# they stay down until the next reboot.
+services_restore
+
 echo "==== done ===="

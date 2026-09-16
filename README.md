@@ -15,10 +15,15 @@ TVs: ad delivery, Automatic Content Recognition, and always-on voice capture.
 ## Features
 
 - Blackholes LG ad / ACR / telemetry domains to loopback by bind-mounting a
-  generated `/etc/hosts` (per-category toggles).
+  generated `/etc/hosts` (per-category toggles, including a separate
+  SDX/crash-upload telemetry list and an optional ThinQ / companion list).
+- Covers every LG region: the regional host variants (`gb.`, `de.`, `us.`,
+  `jp.`, …) are enumerated, so it works on TVs outside the UK.
 - Stops the on-TV ad services (`admanager`, `adoverlay`, `livepick`).
 - Stops the LG voice services (`voiceinput`, `voiceconductor`).
 - Re-checks those kills every minute, since the TV respawns them.
+- Disabling protection puts the stopped services and the UPnP/SSDP daemons
+  back, rather than leaving them down until a reboot.
 - Optionally swaps `/usr/sbin/upnpd` for an inert stub, killing UPnP
   discovery both ways (breaks casting to the TV too).
 - Wipes locally buffered ACR / speech-to-text files.

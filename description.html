@@ -2,10 +2,12 @@
 <p>A webOS homebrew app that switches off the surveillance stack on rooted LG TVs: ad delivery, Automatic Content Recognition, and always-on voice capture.</p>
 <h2>Features</h2>
 <ul>
-<li>Blackholes LG ad / ACR / telemetry domains to loopback by bind-mounting a generated /etc/hosts (per-category toggles).</li>
+<li>Blackholes LG ad / ACR / telemetry domains to loopback by bind-mounting a generated /etc/hosts (per-category toggles, including a separate SDX/crash-upload telemetry list and an optional ThinQ / companion list).</li>
+<li>Covers every LG region: the regional host variants (gb., de., us., jp., &hellip;) are enumerated, so it works on TVs outside the UK.</li>
 <li>Stops the on-TV ad services (admanager, adoverlay, livepick).</li>
 <li>Stops the LG voice services (voiceinput, voiceconductor).</li>
 <li>Re-checks those kills every minute, since the TV respawns them.</li>
+<li>Disabling protection puts the stopped services and the UPnP/SSDP daemons back, rather than leaving them down until a reboot.</li>
 <li>Optionally swaps /usr/sbin/upnpd for an inert stub, killing UPnP discovery both ways (breaks casting to the TV too).</li>
 <li>Wipes locally buffered ACR / speech-to-text files.</li>
 <li>Re-applies everything at boot through a Homebrew Channel init.d hook.</li>
