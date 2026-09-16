@@ -29,6 +29,12 @@ TVs: ad delivery, Automatic Content Recognition, and always-on voice capture.
 - A rooted LG webOS **(9)** TV with the Homebrew Channel installed.
 - Tested on: OLED65G45LW (EU), webOS TV 9.2.4, firmware 23.23.30.
 
+## Install
+
+While this isn't currently published to the Homebrew Channel repo, you can add a custom repo to install it.  
+Add: `https://raw.githubusercontent.com/lewisdoesstuff/lifesgoodwithoutspying/main/repo.json`  
+Then install `Life's Good Without Spying` from the Homebrew Channel.
+
 ## Build
 
 Needs `ares-package` ([setup](https://www.webosbrew.org/develop/guides/env-setup))
