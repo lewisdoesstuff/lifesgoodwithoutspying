@@ -26,6 +26,9 @@ BLOCKDIR="$DIR/blocklist.d"
 HOSTS_GEN="/var/lib/webosbrew/lifesgoodwithoutspying.hosts"
 DOMAINS_TMP="/tmp/lifesgoodwithoutspying.domains.$$"
 KEYS_TMP="/tmp/lifesgoodwithoutspying.keys.$$"
+UNITS_TMP="/tmp/lifesgoodwithoutspying.units.$$"
+EXECS_TMP="/tmp/lifesgoodwithoutspying.execs.$$"
+APPS_TMP="/tmp/lifesgoodwithoutspying.apps.$$"
 
 # Remove only our mounts from /etc/hosts
 # webosbrew (and potentially other apps) may have mounts on this
@@ -94,55 +97,72 @@ apply_hosts() {
     rm -f "$DOMAINS_TMP" "$KEYS_TMP"
 }
 
-# Voice recognition
-apply_voice() {
-    if ! is_on voice.stop; then
-        echo "[~] voice.stop disabled"
-        # toggling back on means voice should work again
-        voice_restore
+# Common apply for the stub-based categories.
+#
+# Turning a toggle on stops the category's units, bind-mounts an inert stub
+# over each target executable, then kills whatever was already running.
+# Turning it off unwinds both, so a toggle is not a one-way door.
+apply_stub_category() {
+    key="$1"
+    unit_fn="$2"
+    exec_fn="$3"
+
+    if ! is_on "$key"; then
+        stub_clear_key "$key"
+        if command -v systemctl >/dev/null 2>&1; then
+            "$unit_fn" > "$UNITS_TMP"
+            while IFS= read -r unit; do
+                [ -n "$unit" ] || continue
+                systemctl start "$unit" >/dev/null 2>&1
+            done < "$UNITS_TMP"
+        fi
+        echo "[~] $key disabled"
         return 0
     fi
 
-    # Stop the voiceinput and voiceconductor units
     if command -v systemctl >/dev/null 2>&1; then
-        if systemctl stop voiceinput voiceconductor >/dev/null 2>&1; then
-            echo "[+] stopped voiceinput + voiceconductor units"
-        else
-            echo "[~] systemctl stop returned non-zero (units may be absent on this build)"
-        fi
+        "$unit_fn" > "$UNITS_TMP"
+        while IFS= read -r unit; do
+            [ -n "$unit" ] || continue
+            systemctl stop "$unit" >/dev/null 2>&1
+        done < "$UNITS_TMP"
     fi
 
-    # Kill any remaining processes
-    for proc in voiceinput voiceinput_network voiceinput_preprocessor \
-                voiceinput_hidraw voiceinput_sound voiceconductor voiceclick; do
-        if pkill -9 "$proc" 2>/dev/null; then
-            echo "[+] killed $proc"
+    stub_write
+    stub_clear_key "$key"
+    "$exec_fn" > "$EXECS_TMP"
+    n=0
+    while IFS= read -r path; do
+        [ -n "$path" ] || continue
+        if stub_mount "$key" "$path"; then
+            n=$((n + 1))
         fi
-    done
+    done < "$EXECS_TMP"
+    echo "[+] $key: stubbed $n executable(s)"
+
+    kill_by_paths "$EXECS_TMP"
 }
 
-
-# Ad services
+# Ad / ACR / telemetry daemons.
 apply_ads() {
-    if ! is_on ads.stop; then
-        # livepick is a unit; admanager/adoverlay respawn on their own
-        if command -v systemctl >/dev/null 2>&1; then
-            systemctl start livepick >/dev/null 2>&1 || true
-        fi
-        return 0
+    apply_stub_category ads.stop ads_units ads_execs
+}
+
+# Voice services, and the voice app if it is already up.
+apply_voice() {
+    apply_stub_category voice.stop voice_units voice_execs
+    if is_on voice.stop; then
+        voice_apps > "$APPS_TMP"
+        while IFS= read -r id; do
+            [ -n "$id" ] || continue
+            app_close "$id"
+        done < "$APPS_TMP"
     fi
-    stopped=0
-    for proc in admanager adoverlay livepick; do
-        if pkill -9 "$proc" 2>/dev/null; then
-            echo "[+] killed $proc"
-            stopped=1
-        fi
-    done
-    if [ "$stopped" -eq 0 ]; then
-        echo "[~] no ad services running"
-    fi
-    # admanager is activity-supervised and restarts when the ad UI asks for it,
-    # so it may reappear until the next apply / boot.
+}
+
+# ThinQ / Alexa / IoT companions (opt-in through domains.thinq).
+apply_thinq() {
+    apply_stub_category domains.thinq thinq_units thinq_execs
 }
 
 # LAN discovery (ssdp/upnp)
@@ -177,6 +197,13 @@ apply_lan() {
     if pkill -9 upnpd 2>/dev/null; then
         echo "[+] killed running upnpd"
     fi
+    # the watcher used to keep ssdp down; do it here now.
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl stop ssdp-discovery-lgtv >/dev/null 2>&1 || true
+    fi
+    if pkill -9 ssdp 2>/dev/null; then
+        echo "[+] killed ssdp"
+    fi
 }
 
 # Clear any existing ACR/voice files 
@@ -207,10 +234,10 @@ apply_purge() {
 }
 
 apply_hosts
-apply_voice
 apply_ads
+apply_voice
+apply_thinq
 apply_lan
 apply_purge
-watch_ensure
 
 echo "==== done ===="

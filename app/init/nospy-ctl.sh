@@ -54,9 +54,6 @@ case "$1" in
         echo "autostart=on"
         ;;
     disable)
-        # stop the watcher first: nospy-remove.sh restores the services the
-        # kill-toggles stopped, and the watcher would just re-kill them.
-        watch_stop
         rm -f "$LINK"
         "$REMOVE"
         echo "autostart=off"
@@ -96,22 +93,25 @@ case "$1" in
         fi
         echo "hosts=$(hosts_state)"
         echo "blocklist=$(blocklist_count)"
-        echo "watch=$(watch_running && echo on || echo off)"
+        echo "stubs=$(stub_count)"
         conf_keys > "$TMP"
         while IFS= read -r key; do
             echo "$key=$(conf_get "$key")"
         done < "$TMP"
         rm -f "$TMP"
-        if ps aux 2>/dev/null | grep -qE '[v]oiceinput|[v]oiceconductor'; then
+        voice_execs > "$TMP.voice"
+        ads_execs > "$TMP.ads"
+        if [ "$(count_running_paths "$TMP.voice")" -gt 0 ]; then
             echo "voice=running"
         else
             echo "voice=stopped"
         fi
-        if ps aux 2>/dev/null | grep -qE '[a]dmanager|[a]dooverlay|[l]ivepick'; then
+        if [ "$(count_running_paths "$TMP.ads")" -gt 0 ]; then
             echo "ads=running"
         else
             echo "ads=stopped"
         fi
+        rm -f "$TMP.voice" "$TMP.ads"
         ;;
     selftest)
         echo "== domain sink =="
@@ -132,14 +132,16 @@ case "$1" in
         echo "  ad.lgsmartad.com  http=${code:-none}  curl_rc=$rc"
         echo
         echo "== voice =="
-        if ps aux 2>/dev/null | grep -qE '[v]oiceinput|[v]oiceconductor'; then
+        voice_execs > "$TMP.voice"
+        if [ "$(count_running_paths "$TMP.voice")" -gt 0 ]; then
             echo "  voice: running (protection NOT active)"
         else
             echo "  voice: stopped"
         fi
+        rm -f "$TMP.voice"
         echo
         echo "== ACR / ad services present on the bus =="
-        ls-monitor -l 2>/dev/null | grep -iE 'service\.acr|service\.livepick|colorInfoMiner|service\.admanager|service\.adoverlay|service\.tvdataexchang' || echo "  (none)"
+        ls-monitor -l 2>/dev/null | grep -iE 'service\.acr|service\.livepick|colorInfoMiner|service\.admanager|service\.adoverlay|service\.tvdataexchang|acr2|nudge|rdxd|uploadd|sportsalarm' || echo "  (none)"
         echo
         echo "== buffered ACR / voice residue files =="
         find /var/log /tmp /var/run -maxdepth 3 -type f \

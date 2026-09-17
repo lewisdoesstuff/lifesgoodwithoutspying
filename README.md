@@ -18,9 +18,14 @@ TVs: ad delivery, Automatic Content Recognition, and always-on voice capture.
 - Blackholes LG ad / ACR / telemetry domains to loopback by bind-mounting a
   generated `/etc/hosts` (per-category toggles, including a separate
   SDX/crash-upload telemetry list and an optional ThinQ / companion list).
-- Stops the on-TV ad services (`admanager`, `adoverlay`, `livepick`).
-- Stops the LG voice services (`voiceinput`, `voiceconductor`).
-- Re-checks those kills every minute, since the TV respawns them.
+- Stops the on-TV ad, ACR and telemetry daemons (`admanager`, `livepick`,
+  `acr2`, `nudge`, `rdxd`, `uploadd`, `sportsalarm`).
+- Stops the LG voice and NLP services (`voiceinput`, `voiceconductor`,
+  `nlpmanager`, `performer`) and the voice app.
+- Bind-mounts an inert stub over each target binary, so the Luna hub cannot
+  respawn it (no polling loop).
+- With the ThinQ / companion toggle on, also stops the assistant and IoT
+  daemons (`trigger_thinq`, `trigger_alexa`, `iot-client`, `iot-proxy`).
 - Disabling protection puts the stopped services and the UPnP/SSDP daemons
   back, rather than leaving them down until a reboot.
 - Optionally swaps `/usr/sbin/upnpd` for an inert stub, killing UPnP
