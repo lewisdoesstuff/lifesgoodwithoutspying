@@ -8,7 +8,7 @@
       "iconUri": "https://raw.githubusercontent.com/lewisdoesstuff/lifesgoodwithoutspying/main/app/largeIcon.png",
       "manifestUrl": "https://github.com/lewisdoesstuff/lifesgoodwithoutspying/releases/latest/download/ooo.lew.lifesgoodwithoutspying.manifest.json",
       "requirements": {
-        "webosRelease": ">=6.0"
+        "webosRelease": ">=5.0"
       }
     }
   ]
