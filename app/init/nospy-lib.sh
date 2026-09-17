@@ -239,11 +239,31 @@ stub_count() {
     fi
 }
 
-# Exact executable path for a pid, with the " (deleted)" marker removed.
-exe_path() {
-    path="$(readlink "/proc/$1/exe" 2>/dev/null)" || return 1
-    [ -n "$path" ] || return 1
-    echo "${path% (deleted)}"
+# Print "<pid> <exe-path>" for every process in one pass. readlink/grep per pid
+# costs hundreds of forks, which is seconds slow on a TV this busy.
+proc_exe_table() {
+    ls -l /proc/[0-9]*/exe 2>/dev/null | awk '
+        {
+            target = ""
+            pid_field = ""
+            for (i = 1; i <= NF; i++) {
+                if ($i == "->") target = $(i + 1)
+                else if ($i ~ /^\/proc\/[0-9]+\/exe$/) pid_field = $i
+            }
+            if (target == "" || pid_field == "") next
+            sub(/^\/proc\//, "", pid_field)
+            sub(/\/exe$/, "", pid_field)
+            print pid_field, target
+        }'
+}
+
+# Pids whose exact exe path is listed in the given file.
+pids_for_paths() {
+    list="$1"
+    [ -f "$list" ] || return 0
+    proc_exe_table | awk -v list="$list" '
+        BEGIN { while ((getline line < list) > 0) want[line] = 1; close(list) }
+        $2 in want { print $1 }'
 }
 
 # Kill every process whose exact exe path is listed in the given file. This
@@ -252,35 +272,48 @@ exe_path() {
 kill_by_paths() {
     list="$1"
     [ -f "$list" ] || return 0
-    pids=""
-    for entry in /proc/[0-9]*; do
-        path="$(exe_path "${entry#/proc/}")" || continue
-        if grep -Fqx "$path" "$list"; then
-            pids="$pids ${entry#/proc/}"
-        fi
-    done
+    pids="$(pids_for_paths "$list" | tr '\n' ' ')"
     [ -n "$pids" ] || return 0
     kill -TERM $pids 2>/dev/null
     sleep 1
-    for pid in $pids; do
-        path="$(exe_path "$pid")" || continue
-        if grep -Fqx "$path" "$list"; then
-            kill -KILL "$pid" 2>/dev/null
-        fi
-    done
-    echo "[+] stopped running target(s):$pids"
+    # a copy that ignored SIGTERM, or one Luna respawned in the meantime
+    pids="$(pids_for_paths "$list" | tr '\n' ' ')"
+    [ -n "$pids" ] || return 0
+    kill -KILL $pids 2>/dev/null
+    echo "[+] stopped target pid(s): $pids"
 }
 
-# Count live processes matching the exact paths in the given file.
+# Count live processes whose exact exe path is listed in the given file.
 count_running_paths() {
     list="$1"
-    n=0
     [ -f "$list" ] || { echo 0; return 0; }
-    for entry in /proc/[0-9]*; do
-        path="$(exe_path "${entry#/proc/}")" || continue
-        grep -Fqx "$path" "$list" && n=$((n + 1))
+    proc_exe_table | awk -v list="$list" '
+        BEGIN { while ((getline line < list) > 0) want[line] = 1; close(list) }
+        $2 in want { n++ }
+        END { print n + 0 }'
+}
+
+# Delete locally buffered ACR / speech-to-text files. Our own scratch files are
+# excluded by name: they live in /tmp and match "voice", so without this a
+# concurrent apply would delete the list a running status call is reading.
+purge_residue() {
+    total=0
+    for base in /var/log /tmp /var/run; do
+        [ -d "$base" ] || continue
+        n="$(find "$base" -maxdepth 3 -type f ! -name 'lifesgoodwithoutspying*' \
+            \( -iname '*acr*' -o -iname '*voice*' -o -iname '*alphonso*' -o -iname '*stt*' \) \
+            2>/dev/null | wc -l)"
+        [ "$n" -gt 0 ] || continue
+        find "$base" -maxdepth 3 -type f ! -name 'lifesgoodwithoutspying*' \
+            \( -iname '*acr*' -o -iname '*voice*' -o -iname '*alphonso*' -o -iname '*stt*' \) \
+            -exec rm -f {} + 2>/dev/null
+        total=$((total + n))
     done
-    echo "$n"
+    if [ "$total" -gt 0 ]; then
+        echo "[+] purged $total ACR/voice residue file(s)"
+    else
+        echo "[~] no ACR/voice residue found"
+    fi
 }
 
 # Print the process id of a running app, or nothing. luna-send only emits
@@ -333,7 +366,7 @@ units_restore() {
     { ads_units; voice_units; thinq_units; } | sort -u |
         while IFS= read -r unit; do
             [ -n "$unit" ] || continue
-            systemctl start "$unit" >/dev/null 2>&1
+            systemctl --no-block start "$unit" >/dev/null 2>&1
         done
     return 0
 }
@@ -341,7 +374,7 @@ units_restore() {
 # Restart the SSDP discovery daemon that apply_lan stops.
 ssdp_restore() {
     command -v systemctl >/dev/null 2>&1 || return 0
-    if systemctl start ssdp-discovery-lgtv >/dev/null 2>&1; then
+    if systemctl --no-block start ssdp-discovery-lgtv >/dev/null 2>&1; then
         echo "[+] restarted ssdp-discovery-lgtv"
     fi
 }

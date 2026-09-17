@@ -30,6 +30,10 @@ UNITS_TMP="/tmp/lifesgoodwithoutspying.units.$$"
 EXECS_TMP="/tmp/lifesgoodwithoutspying.execs.$$"
 APPS_TMP="/tmp/lifesgoodwithoutspying.apps.$$"
 
+# Scratch files are per-run and multi-megabyte-free, but never cleaned before;
+# remove them however we exit.
+trap 'rm -f "$DOMAINS_TMP" "$KEYS_TMP" "$UNITS_TMP" "$EXECS_TMP" "$APPS_TMP"' EXIT
+
 # Remove only our mounts from /etc/hosts
 # webosbrew (and potentially other apps) may have mounts on this
 unmount_ours() {
@@ -113,7 +117,9 @@ apply_stub_category() {
             "$unit_fn" > "$UNITS_TMP"
             while IFS= read -r unit; do
                 [ -n "$unit" ] || continue
-                systemctl start "$unit" >/dev/null 2>&1
+                # --no-block: these units take the full 90s stop/start timeout
+                # otherwise, which would stall the whole apply.
+                systemctl --no-block start "$unit" >/dev/null 2>&1
             done < "$UNITS_TMP"
         fi
         echo "[~] $key disabled"
@@ -124,7 +130,7 @@ apply_stub_category() {
         "$unit_fn" > "$UNITS_TMP"
         while IFS= read -r unit; do
             [ -n "$unit" ] || continue
-            systemctl stop "$unit" >/dev/null 2>&1
+            systemctl --no-block stop "$unit" >/dev/null 2>&1
         done < "$UNITS_TMP"
     fi
 
@@ -199,31 +205,10 @@ apply_lan() {
     fi
     # the watcher used to keep ssdp down; do it here now.
     if command -v systemctl >/dev/null 2>&1; then
-        systemctl stop ssdp-discovery-lgtv >/dev/null 2>&1 || true
+        systemctl --no-block stop ssdp-discovery-lgtv >/dev/null 2>&1 || true
     fi
     if pkill -9 ssdp 2>/dev/null; then
         echo "[+] killed ssdp"
-    fi
-}
-
-# Clear any existing ACR/voice files 
-purge_residue() {
-    total=0
-    for base in /var/log /tmp /var/run; do
-        [ -d "$base" ] || continue
-        n="$(find "$base" -maxdepth 3 -type f \
-            \( -iname '*acr*' -o -iname '*voice*' -o -iname '*alphonso*' -o -iname '*stt*' \) \
-            2>/dev/null | wc -l)"
-        [ "$n" -gt 0 ] || continue
-        find "$base" -maxdepth 3 -type f \
-            \( -iname '*acr*' -o -iname '*voice*' -o -iname '*alphonso*' -o -iname '*stt*' \) \
-            -exec rm -f {} + 2>/dev/null
-        total=$((total + n))
-    done
-    if [ "$total" -gt 0 ]; then
-        echo "[+] purged $total ACR/voice residue file(s)"
-    else
-        echo "[~] no ACR/voice residue found"
     fi
 }
 

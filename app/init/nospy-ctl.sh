@@ -11,6 +11,9 @@ LINK="$INITD/50-lifesgoodwithoutspying"
 LOG="/var/lib/webosbrew/lifesgoodwithoutspying.log"
 TMP="/tmp/lifesgoodwithoutspying.ctl.$$"
 
+# Drop our scratch files however we exit.
+trap 'rm -f "$TMP"*' EXIT
+
 SELF="$(realpath "$0")"
 DIR="$(dirname "$SELF")"
 . "$DIR/nospy-lib.sh"
