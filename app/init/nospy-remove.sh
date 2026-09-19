@@ -22,15 +22,9 @@ else
     echo "[~] /etc/hosts was not overridden"
 fi
 
-if head -n 2 /usr/sbin/upnpd 2>/dev/null | grep -q 'nospy-upnpd-stub'; then
-    if umount /usr/sbin/upnpd 2>/dev/null || umount -l /usr/sbin/upnpd 2>/dev/null; then
-        echo "[+] restored /usr/sbin/upnpd"
-    fi
-fi
-
 # apply stubs executables and stops services; disabling protection should
-# unmount the stubs and turn the services back on, or they stay down until the
-# next reboot.
+# unmount the stubs (including the untracked upnpd one) and turn the services
+# back on, or they stay down until the next reboot.
 services_restore
 
 echo "==== done ===="

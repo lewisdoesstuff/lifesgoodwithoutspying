@@ -379,14 +379,78 @@ ssdp_restore() {
     fi
 }
 
+# True if the real upnpd daemon is running (as opposed to our stub shell).
+# Candidates are matched by comm, which is the basename of the executed file:
+# for the stub that is the script name "upnpd", the same as the real binary.
+# The exe link is what tells the two apart.
+upnp_running() {
+    for pid in $(pgrep upnpd 2>/dev/null); do
+        case "$(readlink "/proc/$pid/exe" 2>/dev/null)" in
+            */upnpd) return 0 ;;
+        esac
+    done
+    return 1
+}
+
+# Kill a pid and its direct children. The upnpd stub is a shell script whose
+# child is a very long sleep; killing only the shell would orphan the sleep.
+kill_with_children() {
+    for child in $(pgrep -P "$1" 2>/dev/null); do
+        kill -9 "$child" 2>/dev/null
+    done
+    kill -9 "$1" 2>/dev/null
+}
+
+# Undo the upnpd stub: unmount it, then kill the stub shells the unmount leaves
+# behind. A stub shell still holds the "upnpd" name, so the service supervising
+# it would not spawn the real binary until it is gone. The exe check keeps a
+# healthy real upnpd alive.
+#
+# Returns 0 if it unstubbed something, 1 if there was nothing to do.
+upnp_unstub() {
+    changed=0
+    if head -n 2 /usr/sbin/upnpd 2>/dev/null | grep -q 'nospy-upnpd-stub'; then
+        if umount /usr/sbin/upnpd 2>/dev/null || umount -l /usr/sbin/upnpd 2>/dev/null; then
+            echo "[+] restored /usr/sbin/upnpd"
+            changed=1
+        else
+            # Still mounted: killing the stub would only make the supervisor
+            # respawn it, so leave it for a later run.
+            echo "[-] failed to unmount /usr/sbin/upnpd"
+            return 1
+        fi
+    fi
+    for pid in $(pgrep upnpd 2>/dev/null); do
+        case "$(readlink "/proc/$pid/exe" 2>/dev/null)" in
+            */upnpd) ;; # real daemon, leave it alone
+            *) kill_with_children "$pid"
+               echo "[+] killed lingering upnpd stub ($pid)"
+               changed=1 ;;
+        esac
+    done
+    if [ "$changed" -eq 1 ]; then
+        sleep 1
+        return 0
+    fi
+    return 1
+}
+
 # upnpd has no systemd unit of its own: it is spawned by
 # com.webos.service.upnp, which luna starts on demand. Pinging that service is
 # what LG's own bootmode-firstuse.service does to bring UPnP up.
 upnp_restore() {
     command -v luna-send >/dev/null 2>&1 || return 0
-    bounded luna-send -n 1 -f \
-        luna://com.webos.service.upnp/com/palm/luna/private/ping '{}' \
-        >/dev/null 2>&1
+    # Already up: skip the luna round-trip, which can block for its timeout.
+    upnp_running && return 0
+    if command -v script >/dev/null 2>&1; then
+        bounded script -q -c \
+            "luna-send -n 1 -f luna://com.webos.service.upnp/com/palm/luna/private/ping '{}'" \
+            /dev/null >/dev/null 2>&1
+    else
+        bounded luna-send -n 1 -f \
+            luna://com.webos.service.upnp/com/palm/luna/private/ping '{}' \
+            >/dev/null 2>&1
+    fi
     echo "[+] asked com.webos.service.upnp to start upnpd"
 }
 
@@ -394,6 +458,7 @@ upnp_restore() {
 # first, then let the units come back up.
 services_restore() {
     stub_clear_all
+    upnp_unstub
     units_restore
     ssdp_restore
     upnp_restore

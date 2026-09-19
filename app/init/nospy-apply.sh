@@ -174,15 +174,15 @@ apply_thinq() {
 # LAN discovery (ssdp/upnp)
 apply_lan() {
     if ! is_on lan.block; then
-        # put the real binary back if ours is mounted
-        if head -n 2 /usr/sbin/upnpd 2>/dev/null | grep -q 'nospy-upnpd-stub'; then
-            if umount /usr/sbin/upnpd 2>/dev/null || umount -l /usr/sbin/upnpd 2>/dev/null; then
-                echo "[+] restored /usr/sbin/upnpd"
-                # we had been blocking, so bring the discovery daemons back up
-                ssdp_restore
-                upnp_restore
-            fi
-        fi
+        # Put the real binary back and clear any stub process that outlived its
+        # mount. A stub shell still holds the "upnpd" name, so the supervisor
+        # would not spawn the real binary until it is gone.
+        upnp_unstub
+        # Ensure discovery is running. Both are cheap when it already is:
+        # ssdp_restore is async, and upnp_restore skips the luna ping when a
+        # real upnpd is up.
+        ssdp_restore
+        upnp_restore
         return 0
     fi
     if [ ! -f /usr/sbin/upnpd ]; then
@@ -199,8 +199,13 @@ apply_lan() {
     else
         echo "[~] upnpd stub already mounted"
     fi
-    # mount first, then kill: anything forked after this gets the stub
-    if pkill -9 upnpd 2>/dev/null; then
+    # mount first, then kill: anything forked after this gets the stub.
+    # Children are killed too, so a stub shell's long sleep is not orphaned.
+    pids="$(pgrep upnpd 2>/dev/null | tr '\n' ' ')"
+    if [ -n "$pids" ]; then
+        for pid in $pids; do
+            kill_with_children "$pid"
+        done
         echo "[+] killed running upnpd"
     fi
     # the watcher used to keep ssdp down; do it here now.
