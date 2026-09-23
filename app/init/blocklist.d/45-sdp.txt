@@ -1,0 +1,85 @@
+# LG Service Delivery Platform (SDX) hosts. Toggle: domains.sdp
+#
+# When enabled, these hosts are omitted from the sink for the first 60 seconds,
+# then blocked. webOS uses an SDP response's X-Server-Time header to set the
+# clock during boot; without it the TV can remain at 2023-01-01.
+#
+# SDP is also used for LG service initialization, device registration and
+# authentication, app metadata, and EULA/notice data. The grace period therefore
+# permits more than clock synchronization.
+rdx2.nextlgsdp.com
+pt.rdx2.nextlgsdp.com
+ibs.nextlgsdp.com
+ibsstat.nextlgsdp.com
+us.ibs.nextlgsdp.com
+gb.nextlgsdp.com
+de.nextlgsdp.com
+ca.nextlgsdp.com
+ae.nextlgsdp.com
+ar.nextlgsdp.com
+at.nextlgsdp.com
+au.nextlgsdp.com
+bd.nextlgsdp.com
+be.nextlgsdp.com
+bg.nextlgsdp.com
+br.nextlgsdp.com
+by.nextlgsdp.com
+ch.nextlgsdp.com
+cl.nextlgsdp.com
+cn.nextlgsdp.com
+co.nextlgsdp.com
+cy.nextlgsdp.com
+cz.nextlgsdp.com
+dk.nextlgsdp.com
+ee.nextlgsdp.com
+eg.nextlgsdp.com
+es.nextlgsdp.com
+fi.nextlgsdp.com
+fr.nextlgsdp.com
+gr.nextlgsdp.com
+hk.nextlgsdp.com
+hr.nextlgsdp.com
+hu.nextlgsdp.com
+id.nextlgsdp.com
+ie.nextlgsdp.com
+il.nextlgsdp.com
+in.nextlgsdp.com
+is.nextlgsdp.com
+it.nextlgsdp.com
+jp.nextlgsdp.com
+ke.nextlgsdp.com
+kr.nextlgsdp.com
+kw.nextlgsdp.com
+kz.nextlgsdp.com
+lk.nextlgsdp.com
+lt.nextlgsdp.com
+lu.nextlgsdp.com
+lv.nextlgsdp.com
+mt.nextlgsdp.com
+mx.nextlgsdp.com
+my.nextlgsdp.com
+ng.nextlgsdp.com
+nl.nextlgsdp.com
+no.nextlgsdp.com
+nz.nextlgsdp.com
+pe.nextlgsdp.com
+ph.nextlgsdp.com
+pk.nextlgsdp.com
+pl.nextlgsdp.com
+pt.nextlgsdp.com
+qa.nextlgsdp.com
+ro.nextlgsdp.com
+rs.nextlgsdp.com
+ru.nextlgsdp.com
+sa.nextlgsdp.com
+se.nextlgsdp.com
+sg.nextlgsdp.com
+si.nextlgsdp.com
+sk.nextlgsdp.com
+th.nextlgsdp.com
+tr.nextlgsdp.com
+tw.nextlgsdp.com
+ua.nextlgsdp.com
+us.nextlgsdp.com
+vn.nextlgsdp.com
+za.nextlgsdp.com

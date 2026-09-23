@@ -2,6 +2,9 @@
 # lifesgoodwithoutspying shared helpers
 
 CONF="/var/lib/webosbrew/lifesgoodwithoutspying.conf"
+HOSTS_GEN="/var/lib/webosbrew/lifesgoodwithoutspying.hosts"
+HOSTS_PENDING="/var/lib/webosbrew/lifesgoodwithoutspying.hosts-pending"
+CLOCK_SYNC_DELAY=60
 
 # Defaults
 conf_default() {
@@ -10,6 +13,7 @@ conf_default() {
         domains.smartad)    echo on ;;
         domains.dashboard)  echo on ;;
         domains.telemetry)  echo on ;;
+        domains.sdp)        echo on ;;
         domains.lgchannels) echo off ;;
         domains.updates)    echo off ;;
         domains.thinq)      echo off ;;
@@ -57,15 +61,15 @@ conf_set() {
 conf_keys() {
     printf '%s\n' \
         domains.acr domains.smartad domains.dashboard domains.telemetry \
-        domains.lgchannels domains.updates domains.thinq \
+        domains.sdp domains.lgchannels domains.updates domains.thinq \
         voice.stop ads.stop lan.block purge.boot
 }
 
-# Newline-separated list of blocklist category keys.
+# Newline-separated list of domain category keys.
 domain_keys() {
     printf '%s\n' \
         domains.smartad domains.acr domains.dashboard domains.telemetry \
-        domains.lgchannels domains.updates domains.thinq
+        domains.sdp domains.lgchannels domains.updates domains.thinq
 }
 
 # Map a blocklist category key to its blocklist file name.
@@ -75,6 +79,7 @@ cat_file_for_key() {
         domains.acr)        echo "20-acr.txt" ;;
         domains.dashboard)  echo "30-dashboard.txt" ;;
         domains.telemetry)  echo "40-telemetry.txt" ;;
+        domains.sdp)        echo "45-sdp.txt" ;;
         domains.thinq)      echo "50-thinq.txt" ;;
         domains.lgchannels) echo "80-lgchannels.txt" ;;
         domains.updates)    echo "90-updates.txt" ;;
@@ -91,14 +96,43 @@ hosts_is_mounted() {
 # mount apart from anyone else's.
 NOSPY_MARKER="# lifesgoodwithoutspying - blocked LG ad/ACR/telemetry endpoints"
 
+# A pending SDP grace-period update is identified by a token so an older
+# delayed worker cannot modify a newer hosts file after a re-apply or disable.
+pending_hosts_current() {
+    [ -f "$HOSTS_PENDING" ] || return 1
+    read -r pending_pid pending_token < "$HOSTS_PENDING"
+    [ -n "$pending_pid" ] && [ "$pending_token" = "$1" ] || return 1
+    kill -0 "$pending_pid" 2>/dev/null
+}
+
+pending_hosts_clear() {
+    [ -f "$HOSTS_PENDING" ] || return 0
+    read -r pending_pid pending_token < "$HOSTS_PENDING"
+    [ "$pending_token" = "$1" ] && rm -f "$HOSTS_PENDING"
+    return 0
+}
+
+pending_hosts_cancel() {
+    rm -f "$HOSTS_PENDING"
+}
+
+hosts_pending() {
+    [ -f "$HOSTS_PENDING" ] || return 1
+    read -r pending_pid pending_token < "$HOSTS_PENDING"
+    [ -n "$pending_pid" ] && [ -n "$pending_token" ] || return 1
+    kill -0 "$pending_pid" 2>/dev/null
+}
+
 # Exit 0 only if OUR generated file is the mount currently on top of /etc/hosts.
 hosts_ours_active() {
     grep -qF "$NOSPY_MARKER" /etc/hosts 2>/dev/null
 }
 
-# Print the state of /etc/hosts: ours | external | open.
+# Print the state of /etc/hosts: waiting | ours | external | open.
 hosts_state() {
-    if ! hosts_is_mounted; then
+    if hosts_pending; then
+        echo "waiting"
+    elif ! hosts_is_mounted; then
         echo "open"
     elif hosts_ours_active; then
         echo "ours"

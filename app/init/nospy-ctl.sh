@@ -126,6 +126,36 @@ case "$1" in
             printf "  %-30s %s\n" "$d" "$(getent hosts "$d" 2>/dev/null | awk '{print $1}' | head -1)"
         done
         printf "  %-30s %s\n" "lgtvonline.lge.com (control)" "$(getent hosts lgtvonline.lge.com 2>/dev/null | awk '{print $1}' | head -1)"
+        printf "  %-30s %s\n" "gb.nextlgsdp.com (SDP clock)" "$(getent hosts gb.nextlgsdp.com 2>/dev/null | awk '{print $1}' | head -1)"
+        state="$(hosts_state)"
+        if is_on domains.sdp; then
+            case "$state" in
+                waiting)
+                    if [ -f "$HOSTS_GEN" ] && grep -q 'nextlgsdp\.com' "$HOSTS_GEN"; then
+                        echo "  SDP clock block              FAILED (present during grace period)"
+                    else
+                        echo "  SDP clock block              pending (60-second grace period)"
+                    fi
+                    ;;
+                ours)
+                    if [ -f "$HOSTS_GEN" ] && grep -q 'nextlgsdp\.com' "$HOSTS_GEN"; then
+                        echo "  SDP clock block              passed"
+                    else
+                        echo "  SDP clock block              FAILED (missing from active sink)"
+                    fi
+                    ;;
+                open)
+                    echo "  SDP clock block              not applied"
+                    ;;
+                *)
+                    echo "  SDP clock block              unavailable ($state sink)"
+                    ;;
+            esac
+        elif [ -f "$HOSTS_GEN" ] && grep -q 'nextlgsdp\.com' "$HOSTS_GEN"; then
+            echo "  SDP clock block              FAILED (disabled but present in generated sink)"
+        else
+            echo "  SDP clock block              disabled"
+        fi
         echo
         echo "== outbound to a blocked host (should fail) =="
         # -4: this build's curl stalls on dual-stack dials to the sinkhole,

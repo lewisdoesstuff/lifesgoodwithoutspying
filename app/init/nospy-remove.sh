@@ -9,6 +9,9 @@ mkdir -p /var/lib/webosbrew 2>/dev/null || true
 exec >>"$LOG" 2>&1
 echo "==== remove $(date) ===="
 
+# A delayed worker must not modify the sink after protection is disabled.
+pending_hosts_cancel
+
 if hosts_ours_active; then
     # lazy fallback so a busy file still detaches
     if umount /etc/hosts 2>/dev/null || umount -l /etc/hosts 2>/dev/null; then

@@ -23,7 +23,6 @@ exec >>"$LOG" 2>&1
 echo "==== apply $(date) ===="
 
 BLOCKDIR="$DIR/blocklist.d"
-HOSTS_GEN="/var/lib/webosbrew/lifesgoodwithoutspying.hosts"
 DOMAINS_TMP="/tmp/lifesgoodwithoutspying.domains.$$"
 KEYS_TMP="/tmp/lifesgoodwithoutspying.keys.$$"
 UNITS_TMP="/tmp/lifesgoodwithoutspying.units.$$"
@@ -44,16 +43,95 @@ unmount_ours() {
     done
 }
 
-# Emit every domain belonging to an enabled category.
+# Emit enabled domains. During the initial sink build, domains.sdp is held
+# back so the other protections can take effect immediately.
 collect_domains() {
+    mode="$1"
     domain_keys > "$KEYS_TMP"
     while IFS= read -r key; do
-        is_on "$key" || continue
+        if [ "$key" = domains.sdp ] && [ "$mode" = initial ]; then
+            # Enabled SDP is held back for the grace period; disabled SDP is
+            # included immediately with the other categories.
+            is_on "$key" && continue
+        else
+            is_on "$key" || continue
+        fi
         file="$(cat_file_for_key "$key")"
         [ -n "$file" ] || continue
         [ -f "$BLOCKDIR/$file" ] || continue
         grep -v '^[[:space:]]*#' "$BLOCKDIR/$file" | grep -v '^[[:space:]]*$'
     done < "$KEYS_TMP"
+}
+
+mount_generated_hosts() {
+    count="$1"
+    if mount --bind "$HOSTS_GEN" /etc/hosts; then
+        echo "[+] /etc/hosts sink applied ($count domains)"
+    else
+        echo "[-] failed to bind-mount /etc/hosts"
+        return 1
+    fi
+}
+
+append_sdp_domains() {
+    file="$(cat_file_for_key domains.sdp)"
+    path="$BLOCKDIR/$file"
+    [ -f "$path" ] || return 1
+    grep -q 'nextlgsdp\.com' "$path" 2>/dev/null || return 1
+    count="$(grep -v '^[[:space:]]*#' "$path" | grep -vc '^[[:space:]]*$')"
+    {
+        echo ""
+        echo "$NOSPY_MARKER SDP clock-sync grace period complete"
+        grep -v '^[[:space:]]*#' "$path" | while IFS= read -r domain; do
+            [ -n "$domain" ] || continue
+            echo "0.0.0.0 $domain"
+            echo ":: $domain"
+        done
+    } >> "$HOSTS_GEN"
+    echo "$count"
+}
+
+hosts_generation_active() {
+    grep -qF "$NOSPY_MARKER generation $1" /etc/hosts 2>/dev/null
+}
+
+# Add SDP to the already-mounted sink after LG has had time to consume
+# X-Server-Time. Run asynchronously so boot hooks and UI calls return
+# immediately. A generation token invalidates the worker if settings are
+# re-applied or protection is disabled during the grace period.
+schedule_sdp_block() {
+    token="$1"
+    (
+        trap - EXIT HUP INT TERM
+        trap '' HUP
+        sleep 1
+        waited=1
+        while [ "$waited" -lt "$CLOCK_SYNC_DELAY" ]; do
+            pending_hosts_current "$token" || exit 0
+            sleep 1
+            waited=$((waited + 1))
+        done
+        pending_hosts_current "$token" || exit 0
+        if ! is_on domains.sdp; then
+            pending_hosts_clear "$token"
+            exit 0
+        fi
+        if ! hosts_generation_active "$token"; then
+            pending_hosts_clear "$token"
+            exit 0
+        fi
+        if ! hosts_ours_active; then
+            echo "[-] our /etc/hosts sink disappeared during SDP grace period"
+        elif [ "$(append_sdp_domains)" -gt 0 ] 2>/dev/null; then
+            echo "[+] SDP domains blocked after ${CLOCK_SYNC_DELAY}s clock-sync grace period"
+        else
+            echo "[-] failed to add SDP domains after clock-sync grace period"
+        fi
+        pending_hosts_clear "$token"
+    ) &
+    pending_pid=$!
+    printf '%s %s\n' "$pending_pid" "$token" > "$HOSTS_PENDING"
+    echo "[~] SDP blocked after ${CLOCK_SYNC_DELAY}s; other domain blocks are active"
 }
 
 # hosts blocking
@@ -67,14 +145,19 @@ apply_hosts() {
         return 1
     fi
 
-    # Remove only our previous mount, leaving whatever is underneath.
+    # Invalidate an older delayed worker, then remove only our previous mount,
+    # leaving whatever is underneath.
+    pending_hosts_cancel
     unmount_ours
 
-    collect_domains > "$DOMAINS_TMP"
+    collect_domains initial > "$DOMAINS_TMP"
     count="$(grep -c . "$DOMAINS_TMP" 2>/dev/null)"
     [ -n "$count" ] || count=0
+    sdp_pending=0
+    is_on domains.sdp && sdp_pending=1
+    generation="$(date +%s)-$$"
 
-    if [ "$count" -eq 0 ]; then
+    if [ "$count" -eq 0 ] && [ "$sdp_pending" -eq 0 ]; then
         echo "[~] no domain categories enabled; our sink is off"
         rm -f "$DOMAINS_TMP" "$KEYS_TMP"
         return 0
@@ -83,7 +166,7 @@ apply_hosts() {
     cp /etc/hosts "$HOSTS_GEN" || return 1
     {
         echo ""
-        echo "$NOSPY_MARKER"
+        echo "$NOSPY_MARKER generation $generation"
         while IFS= read -r domain; do
             [ -n "$domain" ] || continue
             echo "0.0.0.0 $domain"
@@ -91,12 +174,14 @@ apply_hosts() {
         done < "$DOMAINS_TMP"
     } >> "$HOSTS_GEN"
 
-    if mount --bind "$HOSTS_GEN" /etc/hosts; then
-        echo "[+] /etc/hosts sink applied ($count domains)"
-    else
-        echo "[-] failed to bind-mount /etc/hosts"
+    # All non-SDP blocks are active immediately. If SDP is enabled, append it
+    # to this same mounted inode after the clock-sync grace period.
+    if ! mount_generated_hosts "$count"; then
         rm -f "$DOMAINS_TMP" "$KEYS_TMP"
         return 1
+    fi
+    if [ "$sdp_pending" -eq 1 ]; then
+        schedule_sdp_block "$generation"
     fi
     rm -f "$DOMAINS_TMP" "$KEYS_TMP"
 }

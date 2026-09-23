@@ -157,7 +157,9 @@
         enabled = map.autostart === 'on';
         document.getElementById('r-domains').textContent = map.blocklist || '—';
         document.getElementById('r-hosts').textContent =
-            map.hosts === 'ours' ? 'active' : (map.hosts === 'external' ? 'other' : 'off');
+            map.hosts === 'ours' ? 'active' :
+            (map.hosts === 'waiting' ? 'waiting' :
+            (map.hosts === 'external' ? 'other' : 'off'));
         document.getElementById('r-voice').textContent = map.voice === 'stopped' ? 'stopped' : 'running';
         document.getElementById('r-ads').textContent = map.ads === 'stopped' ? 'stopped' : 'running';
         var verdict = document.getElementById('verdict');
@@ -180,6 +182,12 @@
             else if (dirty) {
                 verdict.textContent = 'Changes pending';
                 explain.textContent = 'Your settings changed. Select "Update protection" to apply them.';
+                verdict.classList.add('is-warn');
+                appEl.classList.add('secured', 'pending');
+            }
+            else if (map.hosts === 'waiting') {
+                verdict.textContent = 'SDP grace period';
+                explain.textContent = 'Other domain blocks are active. SDP will be blocked after the 60-second clock-sync grace period.';
                 verdict.classList.add('is-warn');
                 appEl.classList.add('secured', 'pending');
             }

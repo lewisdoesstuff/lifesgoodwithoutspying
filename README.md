@@ -16,8 +16,11 @@ TVs: ad delivery, Automatic Content Recognition, and always-on voice capture.
 ## Features
 
 - Blackholes LG ad / ACR / telemetry domains to loopback by bind-mounting a
-  generated `/etc/hosts` (per-category toggles, including a separate
-  SDX/crash-upload telemetry list and an optional ThinQ / companion list).
+  generated `/etc/hosts` (per-category toggles, including separate
+  crash/diagnostic and optional ThinQ / companion lists).
+- Adds a separate LG Service Delivery Platform (SDP) category. Other domain
+  blocks apply immediately, while SDP waits 60 seconds at boot so the TV can
+  set its clock before those domains are added to the sink.
 - Stops the on-TV ad, ACR and telemetry daemons (`admanager`, `livepick`,
   `acr2`, `nudge`, `rdxd`, `uploadd`, `sportsalarm`).
 - Stops the LG voice and NLP services (`voiceinput`, `voiceconductor`,
@@ -82,6 +85,15 @@ and the main button cycles Enable / Update / Disable.
 
 ## Notes
 
+- **LG SDP / clock sync** is enabled by default. webOS normally gets its clock
+  from the `X-Server-Time` header returned by a regional `*.nextlgsdp.com`
+  service, not NTP. SDP is omitted from the sink for the first 60 seconds, then
+  blocked; all other enabled domain blocks apply immediately. SDP is also used
+  for LG service initialization, device registration/authentication, app
+  metadata and EULA/notice data, so the grace period permits more than clock
+  synchronization. Disabling this category blocks SDP immediately, but the TV
+  can remain at its default `2023-01-01` date and apps such as YouTube may warn
+  or fail until the clock is corrected.
 - You don't need the update block option if you've got the option set in the Homebrew Channel.
 - Font licences: (Chivo, IBM Plex Mono, OFL: see `app/fonts/`).
 
