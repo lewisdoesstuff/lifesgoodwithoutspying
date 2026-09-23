@@ -144,7 +144,7 @@ case "$1" in
         rm -f "$TMP.voice"
         echo
         echo "== ACR / ad services present on the bus =="
-        ls-monitor -l 2>/dev/null | grep -iE 'service\.acr|service\.livepick|colorInfoMiner|service\.admanager|service\.adoverlay|service\.tvdataexchang|acr2|nudge|rdxd|uploadd|sportsalarm' || echo "  (none)"
+        ls-monitor -l 2>/dev/null | grep -iE 'service\.acr|service\.livepick|colorInfoMiner|service\.admanager|service\.adoverlay|service\.tvdataexchang|acr2|nudge|rdxd|uploadd|sportsalarm' | grep -vi 'wowplay' || echo "  (none)"
         echo
         echo "== buffered ACR / voice residue files =="
         find /var/log /tmp /var/run -maxdepth 3 -type f \
