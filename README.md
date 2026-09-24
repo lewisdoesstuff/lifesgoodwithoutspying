@@ -17,7 +17,7 @@ TVs: ad delivery, Automatic Content Recognition, and always-on voice capture.
 
 - Blackholes LG ad / ACR / telemetry domains to loopback by bind-mounting a
   generated `/etc/hosts` (per-category toggles, including separate
-  crash/diagnostic and optional ThinQ / companion lists).
+  crash/diagnostic, QuickSet, and optional ThinQ / companion lists).
 - Adds a separate LG Service Delivery Platform (SDP) category. Other domain
   blocks apply immediately, while SDP waits 60 seconds at boot so the TV can
   set its clock before those domains are added to the sink.
@@ -35,6 +35,9 @@ TVs: ad delivery, Automatic Content Recognition, and always-on voice capture.
   discovery both ways (breaks casting to the TV too).
 - Wipes locally buffered ACR / speech-to-text files.
 - Re-applies everything at boot through a Homebrew Channel `init.d` hook.
+- Optional local DNS filtering routes ConnMan's IPv4 resolver through a
+  reversible helper using the same marked domain list. A separate companion
+  switch can disable ConnMan IPv6 when strict DNS coverage is required.
 
 ## Requirements
 
@@ -51,13 +54,27 @@ Then install `Life's Good Without Spying` from the Homebrew Channel.
 ## Build
 
 Needs `ares-package` ([setup](https://www.webosbrew.org/develop/guides/env-setup))
-and `rsvg-convert` for the icons:
+and `rsvg-convert` for the icons. Bun is optional, but is required to include
+the opt-in DNS filter bundle in the package:
 
 ```
 ./build.sh
 ```
 
 Builds an `.ipk` plus its sha256 into `dist/`.
+
+## Optional DNS filter
+
+A separate helper lives in [`dns-filter/`](dns-filter/). It is a small
+TypeScript DNS proxy with UDP/TCP forwarding, blocklist matching, and
+acknowledged generation reloads. It consumes an atomically published domain
+artifact derived from the app's marked hosts generation, so it sees the same
+enabled blocks without treating `localhost` as blocked. When Bun is
+available, the normal build copies the helper into the IPK; the separate
+`dns.filter` setting is opt-in and defaults off. Its companion
+`dns.disable_ipv6` setting also defaults off. See its
+[README](dns-filter/README.md) for the Bun build/test commands and the
+ConnMan/firewall behavior.
 
 ## Install
 
@@ -94,6 +111,27 @@ and the main button cycles Enable / Update / Disable.
   synchronization. Disabling this category blocks SDP immediately, but the TV
   can remain at its default `2023-01-01` date and apps such as YouTube may warn
   or fail until the clock is corrected.
+- **QuickSet remote codes** use `www.ueiwsp.com` for periodic remote-control
+  code lookup. This is kept in the separate `domains.quickset` category,
+  which defaults off, so enabling ad blocking does not disable QuickSet by
+  default. Turn it on only if you do not need remote setup or replacement
+  remote controls.
+- **The domain sink is host-based.** The self-test's `getent` and `curl`
+  checks only prove that the generated `/etc/hosts` is visible to commands
+  using the local resolver. Some webOS services use their own DNS path,
+  including DNS-over-TLS, and may bypass `/etc/hosts`; an un-stubbed service
+  could therefore still connect. The voice and ad process checks are the
+  stronger signal for the protections this app controls.
+- **The DNS filter toggle is opt-in.** It uses the atomically published domain
+  artifact derived from the marked generated hosts list, routes ConnMan's IPv4
+  nameserver through a local helper, and blocks LAN access to the helper
+  listener. The separate `dns.disable_ipv6` companion switch controls whether
+  the handoff also changes ConnMan IPv6; when it is off, IPv6 is preserved and
+  IPv6 DNS may bypass the helper. Disabling the DNS filter restores the
+  original nameserver and restores IPv6 only if the handoff had changed it.
+  Direct DNS, DNS-over-TLS/HTTPS, and custom resolvers remain outside its
+  scope; if the helper exits, the handoff fails closed until re-applied or
+  rolled back.
 - You don't need the update block option if you've got the option set in the Homebrew Channel.
 - Font licences: (Chivo, IBM Plex Mono, OFL: see `app/fonts/`).
 

@@ -10,6 +10,10 @@
     var enabled = false;
     var dirty = false;
     var restoreFocus = null;
+    var STATUS_POLL_MS = 5000;
+    var statusPollTimer = null;
+    var lastStatus = null;
+    var navigationRowsCache = null;
     function errmsg(e) {
         return e instanceof Error ? e.message : String(e);
     }
@@ -18,6 +22,7 @@
         var layers = document.getElementById('layers');
         if (layers)
             layers.hidden = show;
+        invalidateNavigation();
         var b = document.getElementById('btn-log');
         if (b)
             b.textContent = show ? 'Hide log' : 'Show log';
@@ -81,14 +86,16 @@
     function shq(s) {
         return "'" + String(s).replace(/'/g, "'\\''") + "'";
     }
-    function exec(command) {
+    function exec(command, quiet) {
         return luna(HBC + '/exec', { command: command }).then(function (res) {
-            var text = (res.stdoutString || '').trim();
-            if (text)
-                log(text);
-            var err = (res.stderrString || '').trim();
-            if (err)
-                log('stderr: ' + err);
+            if (!quiet) {
+                var text = (res.stdoutString || '').trim();
+                if (text)
+                    log(text);
+                var err = (res.stderrString || '').trim();
+                if (err)
+                    log('stderr: ' + err);
+            }
             return res;
         });
     }
@@ -100,9 +107,9 @@
             return res.appInfo.folderPath;
         });
     }
-    function ctl(action) {
+    function ctl(action, quiet) {
         return getFolder().then(function (dir) {
-            return exec('sh ' + shq(dir + '/init/nospy-ctl.sh') + ' ' + action);
+            return exec('sh ' + shq(dir + '/init/nospy-ctl.sh') + ' ' + action, quiet);
         });
     }
     function parseStatus(text) {
@@ -160,6 +167,15 @@
             map.hosts === 'ours' ? 'active' :
             (map.hosts === 'waiting' ? 'waiting' :
             (map.hosts === 'external' ? 'other' : 'off'));
+        var dnsRuntime = map.dns_filter || 'unavailable';
+        var dnsEnabled = map['dns.filter'] === 'on';
+        var dnsIpv6Disabled = map['dns.disable_ipv6'] === 'on';
+        document.getElementById('r-dns').textContent =
+            dnsEnabled ?
+                (dnsRuntime === 'yes' ? 'active' :
+                    (dnsRuntime === 'no' ? 'pending' : 'unavailable')) : 'off';
+        document.getElementById('r-ipv6').textContent =
+            !dnsEnabled ? 'not managed' : (dnsIpv6Disabled ? 'disabled' : 'preserved');
         document.getElementById('r-voice').textContent = map.voice === 'stopped' ? 'stopped' : 'running';
         document.getElementById('r-ads').textContent = map.ads === 'stopped' ? 'stopped' : 'running';
         var verdict = document.getElementById('verdict');
@@ -185,6 +201,18 @@
                 verdict.classList.add('is-warn');
                 appEl.classList.add('secured', 'pending');
             }
+            else if (map['dns.filter'] === 'on' && map.dns_filter !== 'yes') {
+                verdict.textContent = 'DNS filter needs attention';
+                explain.textContent = 'The DNS filter is enabled but its ConnMan handoff is not active. Check the log and helper status.';
+                verdict.classList.add('is-warn');
+                appEl.classList.add('secured', 'pending');
+            }
+            else if (map['dns.filter'] === 'on' && map['dns.disable_ipv6'] === 'off') {
+                verdict.textContent = 'DNS filter active (IPv4 path)';
+                explain.textContent = 'ConnMan IPv6 is preserved. IPv6 DNS may bypass the local helper; enable the companion IPv6 switch for strict coverage.';
+                verdict.classList.add('is-warn');
+                appEl.classList.add('secured', 'pending');
+            }
             else if (map.hosts === 'waiting') {
                 verdict.textContent = 'SDP grace period';
                 explain.textContent = 'Other domain blocks are active. SDP will be blocked after the 60-second clock-sync grace period.';
@@ -193,30 +221,68 @@
             }
             else {
                 verdict.textContent = 'Protected';
-                explain.textContent = 'Viewing, ad, and voice data are blocked.';
+                explain.textContent = 'Targeted ad and voice services are stopped; enabled domain blocks are applied.';
                 verdict.classList.add('is-secure');
                 appEl.classList.add('secured');
             }
         }
         updateMainButton();
+        invalidateNavigation();
     }
-    function refresh() {
+    // The SDP worker changes the host state asynchronously. Status is not a
+    // free call (the helper inspects the process table), so poll only while an
+    // active app is actually showing that grace-period state.
+    function appIsActive() {
+        if (document.hidden === true || document.webkitHidden === true ||
+            document.visibilityState === 'hidden')
+            return false;
+        return true;
+    }
+    function stopStatusPolling() {
+        if (statusPollTimer !== null) {
+            clearTimeout(statusPollTimer);
+            statusPollTimer = null;
+        }
+    }
+    function scheduleStatusPolling() {
+        stopStatusPolling();
+        if (!appIsActive() || !lastStatus || lastStatus.hosts !== 'waiting')
+            return;
+        statusPollTimer = setTimeout(function () {
+            statusPollTimer = null;
+            if (appIsActive())
+                refresh({ quiet: true });
+        }, STATUS_POLL_MS);
+    }
+    function refresh(options) {
+        var quiet = !!(options && options.quiet);
+        stopStatusPolling();
         return luna(HBC + '/checkRoot', {}).then(function (res) {
             var isRoot = !!res.returnValue;
             if (!isRoot) {
+                lastStatus = null;
                 renderState({}, false);
                 return null;
             }
-            return ctl('status').then(function (r) {
+            return ctl('status', quiet).then(function (r) {
                 var map = parseStatus(r.stdoutString);
+                lastStatus = map;
                 renderToggles(map);
                 renderState(map, true);
                 return null;
             });
         }).catch(function (e) {
-            renderState({}, false);
-            log('status: ' + errmsg(e));
+            // A quiet poll keeps the last state visible and retries; a manual
+            // refresh retains the existing error state and log behavior.
+            if (!quiet) {
+                lastStatus = null;
+                renderState({}, false);
+                log('status: ' + errmsg(e));
+            }
             return null;
+        }).then(function (result) {
+            scheduleStatusPolling();
+            return result;
         });
     }
     function allButtons() {
@@ -225,9 +291,11 @@
     // lock the ui while something runs, then put focus back
     function busy(on) {
         if (on) {
+            stopStatusPolling();
             restoreFocus = document.activeElement;
         }
         allButtons().forEach(function (b) { b.disabled = on; });
+        invalidateNavigation();
         if (!on) {
             var target = document.getElementById('btn-main');
             if (restoreFocus instanceof HTMLButtonElement &&
@@ -237,6 +305,7 @@
             if (target)
                 target.focus();
             restoreFocus = null;
+            scheduleStatusPolling();
         }
     }
     // run the passed function, refresh after
@@ -298,6 +367,9 @@
         showConsole(consoleEl.hidden);
     });
     // d-pad navigation
+    function invalidateNavigation() {
+        navigationRowsCache = null;
+    }
     function focusables() {
         return toArray(document.querySelectorAll('button:not([disabled])'))
             .filter(function (el) { return el.offsetParent !== null; });
@@ -305,19 +377,61 @@
     function focusElement(el) {
         if (!el)
             return;
-        el.focus();
-        if (el.scrollIntoView)
+        try {
+            el.focus({ preventScroll: true });
+        }
+        catch (_error) {
+            el.focus();
+        }
+        var scroller = document.querySelector('.layers');
+        if (scroller) {
+            var top = el.__nospyNavTop;
+            var bottom = el.__nospyNavBottom;
+            if (typeof top === 'number' && typeof bottom === 'number') {
+                var viewportHeight = scroller.__nospyNavViewportHeight || scroller.clientHeight;
+                var currentTop = scroller.scrollTop;
+                if (top < currentTop)
+                    scroller.scrollTop = top;
+                else if (bottom > currentTop + viewportHeight)
+                    scroller.scrollTop = bottom - viewportHeight;
+            }
+            else {
+                var item = el.getBoundingClientRect();
+                var view = scroller.getBoundingClientRect();
+                if (item.top < view.top)
+                    scroller.scrollTop -= view.top - item.top;
+                else if (item.bottom > view.bottom)
+                    scroller.scrollTop += item.bottom - view.bottom;
+            }
+        }
+        else if (el.scrollIntoView) {
             el.scrollIntoView({ block: 'nearest' });
+        }
     }
     function centerX(el) {
+        if (typeof el.__nospyNavCenterX === 'number')
+            return el.__nospyNavCenterX;
         var r = el.getBoundingClientRect();
         return r.left + r.width / 2;
     }
-    // group buttons into rows so left/right stays in the row
+    // Group buttons into rows once per layout change. Remote navigation then
+    // avoids measuring every button on every key repeat.
     function layoutRows() {
+        if (navigationRowsCache !== null)
+            return navigationRowsCache;
         var rows = [];
+        var scroller = document.querySelector('.layers');
+        var scrollerRect = scroller ? scroller.getBoundingClientRect() : null;
+        var scrollTop = scroller ? scroller.scrollTop : 0;
+        if (scroller)
+            scroller.__nospyNavViewportHeight = scroller.clientHeight;
         focusables().forEach(function (el) {
             var r = el.getBoundingClientRect();
+            if (scrollerRect) {
+                el.__nospyNavTop = r.top - scrollerRect.top + scrollTop;
+                el.__nospyNavBottom = el.__nospyNavTop + r.height;
+            }
+            el.__nospyNavCenterX = r.left + r.width / 2;
             var cy = r.top + r.height / 2;
             var row = null;
             for (var i = 0; i < rows.length; i++) {
@@ -335,8 +449,11 @@
         });
         rows.sort(function (a, b) { return a.cy - b.cy; });
         rows.forEach(function (row) {
-            row.items.sort(function (a, b) { return centerX(a) - centerX(b); });
+            row.items.sort(function (a, b) {
+                return a.__nospyNavCenterX - b.__nospyNavCenterX;
+            });
         });
+        navigationRowsCache = rows;
         return rows;
     }
     function locate(rows, el) {
@@ -391,6 +508,7 @@
         });
         focusElement(best);
     }
+    window.addEventListener('resize', invalidateNavigation, true);
     var KEY_DIR = { 37: 'left', 38: 'up', 39: 'right', 40: 'down' };
     document.addEventListener('keydown', function (e) {
         if (KEY_DIR[e.keyCode]) {
@@ -405,6 +523,25 @@
                 el.click();
             }
         }
+    }, true);
+    // webOS 5-era WebKit uses webkitvisibilitychange; newer engines use the
+    // standard event. Stop background work when hidden and re-check on resume.
+    function visibilityChanged() {
+        if (appIsActive()) {
+            stopStatusPolling();
+            refresh({ quiet: true });
+        }
+        else {
+            stopStatusPolling();
+        }
+    }
+    var visibilityEvent = typeof document.hidden !== 'undefined' ? 'visibilitychange' :
+        (typeof document.webkitHidden !== 'undefined' ? 'webkitvisibilitychange' : 'visibilitychange');
+    document.addEventListener(visibilityEvent, visibilityChanged, true);
+    document.addEventListener('webOSRelaunch', function () {
+        // webOSRelaunch can arrive just before document.hidden is cleared.
+        stopStatusPolling();
+        refresh({ quiet: true });
     }, true);
     refresh();
     var main = document.getElementById('btn-main');

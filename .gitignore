@@ -2,3 +2,5 @@ dist/
 *.ipk
 .DS_Store
 node_modules/
+/app/init/nospy-dns-filter.js
+/app/init/nospy-dns-filter.sh

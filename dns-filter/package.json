@@ -1,0 +1,20 @@
+{
+  "name": "lifesgoodwithoutspying-dns-filter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Optional local DNS filtering helper for Life's Good Without Spying",
+  "packageManager": "bun@1.3.14",
+  "scripts": {
+    "build": "tsc --noEmit && vite build",
+    "check": "tsc --noEmit",
+    "smoke": "node scripts/smoke.js && node scripts/status-smoke.js",
+    "test": "bun test",
+    "test:watch": "bun test --watch"
+  },
+  "devDependencies": {
+    "@types/node": "8.10.66",
+    "bun-types": "^1.4.2",
+    "typescript": "5.9.3",
+    "vite": "8.3.0"
+  }
+}

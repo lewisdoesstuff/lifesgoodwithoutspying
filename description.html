@@ -2,8 +2,10 @@
 <p>A webOS homebrew app that switches off the surveillance stack on rooted LG TVs: ad delivery, Automatic Content Recognition, and always-on voice capture.</p>
 <h2>Features</h2>
 <ul>
-<li>Blackholes LG ad / ACR / telemetry domains to loopback by bind-mounting a generated /etc/hosts (per-category toggles, including separate crash/diagnostic and optional ThinQ / companion lists).</li>
+<li>Blackholes LG ad / ACR / telemetry domains to loopback by bind-mounting a generated /etc/hosts (per-category toggles, including separate crash/diagnostic, QuickSet, and optional ThinQ / companion lists).</li>
+<li>Keeps UEI QuickSet remote-code lookup available by default; an optional QuickSet toggle can block it.</li>
 <li>Delays blocking LG Service Delivery Platform (SDP) clock hosts for 60 seconds, while applying all other domain blocks immediately, so webOS can set its clock first.</li>
+<li>Optionally routes ConnMan IPv4 DNS through a reversible local filter using the same marked domain list; when the filter is enabled, a separate companion switch can disable ConnMan IPv6 for strict DNS coverage.</li>
 <li>Stops the on-TV ad, ACR and telemetry daemons (admanager, livepick, acr2, nudge, rdxd, uploadd, sportsalarm).</li>
 <li>Stops the LG voice and NLP services (voiceinput, voiceconductor, nlpmanager, performer) and the voice app.</li>
 <li>Bind-mounts an inert stub over each target binary, so the Luna hub cannot respawn it (no polling loop).</li>

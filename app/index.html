@@ -22,8 +22,10 @@
       <button id="btn-main" class="primary" autofocus>Enable protection</button>
 
       <dl class="readout">
-        <div><dt>Domains blocked</dt><dd id="r-domains">—</dd></div>
+        <div><dt>Domain entries</dt><dd id="r-domains">—</dd></div>
         <div><dt>Domain sink</dt><dd id="r-hosts">—</dd></div>
+        <div><dt>DNS filter</dt><dd id="r-dns">—</dd></div>
+        <div><dt>DNS IPv6 mode</dt><dd id="r-ipv6">—</dd></div>
         <div><dt>Voice services</dt><dd id="r-voice">—</dd></div>
         <div><dt>Ad services</dt><dd id="r-ads">—</dd></div>
       </dl>
@@ -48,6 +50,10 @@
             <span class="sw" aria-hidden="true"></span>
             <span class="layer-text"><b>SmartAd &amp; ad platform</b><small>Blocks ad delivery and tracking</small></span>
           </button>
+          <button class="layer" data-key="domains.quickset" role="switch" aria-checked="false">
+            <span class="sw" aria-hidden="true"></span>
+            <span class="layer-text"><b>QuickSet remote codes</b><small>Optional. Blocks remote-code lookup; may affect remote setup</small></span>
+          </button>
           <button class="layer" data-key="domains.dashboard" role="switch" aria-checked="false">
             <span class="sw" aria-hidden="true"></span>
             <span class="layer-text"><b>Home dashboard &amp; recs</b><small>Blocks recommendation telemetry</small></span>
@@ -59,6 +65,14 @@
           <button class="layer" data-key="domains.sdp" role="switch" aria-checked="false">
             <span class="sw" aria-hidden="true"></span>
             <span class="layer-text"><b>LG SDP &amp; clock sync</b><small>Blocks SDP after a 60-second clock-sync grace period</small></span>
+          </button>
+          <button class="layer" data-key="dns.filter" role="switch" aria-checked="false">
+            <span class="sw" aria-hidden="true"></span>
+            <span class="layer-text"><b>Local DNS filter</b><small>Routes ConnMan IPv4 DNS through the local helper; IPv6 is a separate companion choice</small></span>
+          </button>
+          <button class="layer" data-key="dns.disable_ipv6" role="switch" aria-checked="false">
+            <span class="sw" aria-hidden="true"></span>
+            <span class="layer-text"><b>Disable IPv6 with DNS filter</b><small>Companion switch; turns ConnMan IPv6 off only while the DNS filter is enabled. If off, IPv6 DNS may bypass the helper.</small></span>
           </button>
           <button class="layer" data-key="voice.stop" role="switch" aria-checked="false">
             <span class="sw" aria-hidden="true"></span>

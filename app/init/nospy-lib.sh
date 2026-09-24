@@ -4,6 +4,7 @@
 CONF="/var/lib/webosbrew/lifesgoodwithoutspying.conf"
 HOSTS_GEN="/var/lib/webosbrew/lifesgoodwithoutspying.hosts"
 HOSTS_PENDING="/var/lib/webosbrew/lifesgoodwithoutspying.hosts-pending"
+DNS_BLOCKLIST="/var/lib/webosbrew/lifesgoodwithoutspying.dns"
 CLOCK_SYNC_DELAY=60
 
 # Defaults
@@ -11,12 +12,15 @@ conf_default() {
     case "$1" in
         domains.acr)        echo on ;;
         domains.smartad)    echo on ;;
+        domains.quickset)   echo off ;;
         domains.dashboard)  echo on ;;
         domains.telemetry)  echo on ;;
         domains.sdp)        echo on ;;
         domains.lgchannels) echo off ;;
         domains.updates)    echo off ;;
         domains.thinq)      echo off ;;
+        dns.filter)         echo off ;;
+        dns.disable_ipv6)   echo off ;;
         voice.stop)         echo on ;;
         ads.stop)           echo on ;;
         lan.block)          echo off ;;
@@ -60,22 +64,24 @@ conf_set() {
 # Newline-separated list of every toggleable key.
 conf_keys() {
     printf '%s\n' \
-        domains.acr domains.smartad domains.dashboard domains.telemetry \
-        domains.sdp domains.lgchannels domains.updates domains.thinq \
-        voice.stop ads.stop lan.block purge.boot
+        domains.acr domains.smartad domains.quickset domains.dashboard \
+        domains.telemetry domains.sdp domains.lgchannels domains.updates \
+        domains.thinq dns.filter dns.disable_ipv6 voice.stop ads.stop lan.block purge.boot
 }
 
 # Newline-separated list of domain category keys.
 domain_keys() {
     printf '%s\n' \
-        domains.smartad domains.acr domains.dashboard domains.telemetry \
-        domains.sdp domains.lgchannels domains.updates domains.thinq
+        domains.smartad domains.quickset domains.acr domains.dashboard \
+        domains.telemetry domains.sdp domains.lgchannels domains.updates \
+        domains.thinq
 }
 
 # Map a blocklist category key to its blocklist file name.
 cat_file_for_key() {
     case "$1" in
         domains.smartad)    echo "10-smartad.txt" ;;
+        domains.quickset)   echo "15-quickset.txt" ;;
         domains.acr)        echo "20-acr.txt" ;;
         domains.dashboard)  echo "30-dashboard.txt" ;;
         domains.telemetry)  echo "40-telemetry.txt" ;;

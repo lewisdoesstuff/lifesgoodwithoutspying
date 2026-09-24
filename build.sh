@@ -24,6 +24,26 @@ else
   echo "note: rsvg-convert not found; packaging existing app/icon.png and app/largeIcon.png" >&2
 fi
 
+# Build the optional DNS filter bundle with Bun when it is available. The
+# generated files are copied into the app only for this package build; the
+# canonical source remains under dns-filter/.
+DNS_INIT_SOURCE="dns-filter/scripts/tv-handoff.sh"
+DNS_INIT_TARGET="app/init/nospy-dns-filter.sh"
+DNS_BUNDLE_TARGET="app/init/nospy-dns-filter.js"
+rm -f "$DNS_INIT_TARGET" "$DNS_BUNDLE_TARGET"
+if [ -f dns-filter/package.json ]; then
+    if command -v bun >/dev/null 2>&1; then
+        (cd dns-filter && bun install --frozen-lockfile && bun run build)
+        cp "$DNS_INIT_SOURCE" "$DNS_INIT_TARGET"
+        cp dns-filter/dist/nospy-dns-filter.js "$DNS_BUNDLE_TARGET"
+        chmod 755 "$DNS_INIT_TARGET"
+        chmod 644 "$DNS_BUNDLE_TARGET"
+        echo "DNS filter bundle included"
+    else
+        echo "note: Bun not found; DNS filter toggle will be unavailable in this package"
+    fi
+fi
+
 # run-parts only runs executable files; make sure the hooks carry the bit.
 chmod +x app/init/nospy-*
 

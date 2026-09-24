@@ -10,7 +10,6 @@ ibs.lgappstv.com
 ibsstat.lgappstv.com
 us.emp.lgsmartplatform.com
 us.lgeapi.com
-www.ueiwsp.com
 # GB/EU regional ad hosts
 gb.ad.lgsmartad.com
 gb.info.lgsmartad.com

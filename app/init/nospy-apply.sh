@@ -23,6 +23,8 @@ exec >>"$LOG" 2>&1
 echo "==== apply $(date) ===="
 
 BLOCKDIR="$DIR/blocklist.d"
+DNS_FILTER_INIT="$DIR/nospy-dns-filter.sh"
+DNS_FILTER_STATE="/var/lib/webosbrew/lifesgoodwithoutspying-dns-filter.state"
 DOMAINS_TMP="/tmp/lifesgoodwithoutspying.domains.$$"
 KEYS_TMP="/tmp/lifesgoodwithoutspying.keys.$$"
 UNITS_TMP="/tmp/lifesgoodwithoutspying.units.$$"
@@ -31,7 +33,7 @@ APPS_TMP="/tmp/lifesgoodwithoutspying.apps.$$"
 
 # Scratch files are per-run and multi-megabyte-free, but never cleaned before;
 # remove them however we exit.
-trap 'rm -f "$DOMAINS_TMP" "$KEYS_TMP" "$UNITS_TMP" "$EXECS_TMP" "$APPS_TMP"' EXIT
+trap 'rm -f "$DOMAINS_TMP" "$KEYS_TMP" "$UNITS_TMP" "$EXECS_TMP" "$APPS_TMP" "$DNS_BLOCKLIST.tmp.$$" "$DNS_BLOCKLIST.sdp.$$"' EXIT
 
 # Remove only our mounts from /etc/hosts
 # webosbrew (and potentially other apps) may have mounts on this
@@ -71,6 +73,52 @@ mount_generated_hosts() {
         echo "[-] failed to bind-mount /etc/hosts"
         return 1
     fi
+}
+
+# Keep valid generation artifacts even when every domain category is disabled.
+# The DNS handoff can then load an intentional empty generation instead of
+# retaining entries from an earlier protection generation.
+write_empty_generated_hosts() {
+    empty_tmp="$HOSTS_GEN.empty.$$"
+    {
+        echo ""
+        echo "$NOSPY_MARKER generation empty-$(date +%s)-$$"
+    } > "$empty_tmp" || return 1
+    chmod 644 "$empty_tmp" || return 1
+    mv "$empty_tmp" "$HOSTS_GEN"
+}
+
+# Publish the DNS domain artifact independently of /etc/hosts. The temporary
+# file is replaced atomically so a reload can never observe a partial list.
+write_dns_artifact() {
+    input="$1"
+    generation="$2"
+    count="$(grep -c . "$input" 2>/dev/null)"
+    [ -n "$count" ] || count=0
+    artifact_tmp="$DNS_BLOCKLIST.tmp.$$"
+    {
+        echo "# lifesgoodwithoutspying dns-filter generation $generation rules $count"
+        cat "$input"
+    } > "$artifact_tmp" || return 1
+    chmod 600 "$artifact_tmp" || return 1
+    mv "$artifact_tmp" "$DNS_BLOCKLIST"
+}
+
+append_sdp_dns_artifact() {
+    base_generation="$1"
+    file="$(cat_file_for_key domains.sdp)"
+    path="$BLOCKDIR/$file"
+    [ -f "$path" ] || return 1
+    grep -q "^# lifesgoodwithoutspying dns-filter generation $base_generation rules " \
+        "$DNS_BLOCKLIST" 2>/dev/null || return 1
+
+    combined="$DNS_BLOCKLIST.sdp.$$"
+    sed '1d' "$DNS_BLOCKLIST" > "$combined" || return 1
+    grep -v '^[[:space:]]*#' "$path" | grep -v '^[[:space:]]*$' >> "$combined" || return 1
+    write_dns_artifact "$combined" "${base_generation}-sdp"
+    result=$?
+    rm -f "$combined"
+    return "$result"
 }
 
 append_sdp_domains() {
@@ -124,6 +172,13 @@ schedule_sdp_block() {
             echo "[-] our /etc/hosts sink disappeared during SDP grace period"
         elif [ "$(append_sdp_domains)" -gt 0 ] 2>/dev/null; then
             echo "[+] SDP domains blocked after ${CLOCK_SYNC_DELAY}s clock-sync grace period"
+            if append_sdp_dns_artifact "$token"; then
+                if is_on dns.filter && [ -x "$DNS_FILTER_INIT" ]; then
+                    "$DNS_FILTER_INIT" reload || echo "[-] DNS filter reload failed after SDP update"
+                fi
+            else
+                echo "[-] failed to publish DNS artifact after SDP update"
+            fi
         else
             echo "[-] failed to add SDP domains after clock-sync grace period"
         fi
@@ -159,6 +214,8 @@ apply_hosts() {
 
     if [ "$count" -eq 0 ] && [ "$sdp_pending" -eq 0 ]; then
         echo "[~] no domain categories enabled; our sink is off"
+        write_empty_generated_hosts || echo "[-] failed to write empty generated hosts marker"
+        write_dns_artifact "$DOMAINS_TMP" "empty-$generation" || echo "[-] failed to write empty DNS artifact"
         rm -f "$DOMAINS_TMP" "$KEYS_TMP"
         return 0
     fi
@@ -180,10 +237,53 @@ apply_hosts() {
         rm -f "$DOMAINS_TMP" "$KEYS_TMP"
         return 1
     fi
+    if ! write_dns_artifact "$DOMAINS_TMP" "$generation"; then
+        echo "[-] failed to publish DNS artifact; removing incomplete hosts sink"
+        unmount_ours
+        rm -f "$DOMAINS_TMP" "$KEYS_TMP"
+        return 1
+    fi
     if [ "$sdp_pending" -eq 1 ]; then
         schedule_sdp_block "$generation"
     fi
     rm -f "$DOMAINS_TMP" "$KEYS_TMP"
+}
+
+dns_filter_ipv6_mode() {
+    if is_on dns.disable_ipv6; then
+        echo off
+    else
+        echo preserve
+    fi
+}
+
+apply_dns_filter() {
+    if [ -f "$DNS_FILTER_STATE" ] && [ ! -x "$DNS_FILTER_INIT" ]; then
+        echo "[-] DNS handoff state exists but its rollback script is missing"
+        return 1
+    fi
+    if is_on dns.filter; then
+        if [ ! -x "$DNS_FILTER_INIT" ] || [ ! -f "$DIR/nospy-dns-filter.js" ]; then
+            echo "[-] DNS filter is enabled but its helper bundle is missing"
+            return 1
+        fi
+        # Reconfigure the complete handoff when either companion setting changes.
+        # The nameserver is always part of the handoff; only IPv6 is optional.
+        if [ -f "$DNS_FILTER_STATE" ]; then
+            "$DNS_FILTER_INIT" disable || return 1
+        fi
+        NOSPY_DNS_IPV6_MODE="$(dns_filter_ipv6_mode)" "$DNS_FILTER_INIT" enable
+        return $?
+    fi
+
+    if [ -f "$DNS_FILTER_STATE" ] && [ -x "$DNS_FILTER_INIT" ]; then
+        "$DNS_FILTER_INIT" disable
+        return $?
+    fi
+    if is_on dns.disable_ipv6; then
+        echo "[~] dns.disable_ipv6 is companion-only; ignored while dns.filter is off"
+    fi
+    return 0
 }
 
 # Common apply for the stub-based categories.
@@ -308,11 +408,24 @@ apply_purge() {
     fi
 }
 
-apply_hosts
+hosts_ok=1
+dns_filter_ok=1
+apply_hosts || hosts_ok=0
+if [ "$hosts_ok" -eq 1 ]; then
+    apply_dns_filter || dns_filter_ok=0
+elif [ -f "$DNS_FILTER_STATE" ] && [ -x "$DNS_FILTER_INIT" ]; then
+    echo "[-] domain generation failed; stopping the DNS handoff to avoid stale rules"
+    "$DNS_FILTER_INIT" disable || dns_filter_ok=0
+fi
 apply_ads
 apply_voice
 apply_thinq
 apply_lan
 apply_purge
+
+if [ "$dns_filter_ok" -ne 1 ]; then
+    echo "[-] one or more DNS handoff operations failed"
+    exit 1
+fi
 
 echo "==== done ===="
