@@ -54,8 +54,8 @@ Then install `Life's Good Without Spying` from the Homebrew Channel.
 ## Build
 
 Needs `ares-package` ([setup](https://www.webosbrew.org/develop/guides/env-setup))
-and `rsvg-convert` for the icons. Bun is optional, but is required to include
-the opt-in DNS filter bundle in the package:
+and `rsvg-convert` for the icons. `bun` is also required, to build the DNS
+filter bundle.
 
 ```
 ./build.sh
@@ -69,12 +69,11 @@ A separate helper lives in [`dns-filter/`](dns-filter/). It is a small
 TypeScript DNS proxy with UDP/TCP forwarding, blocklist matching, and
 acknowledged generation reloads. It consumes an atomically published domain
 artifact derived from the app's marked hosts generation, so it sees the same
-enabled blocks without treating `localhost` as blocked. When Bun is
-available, the normal build copies the helper into the IPK; the separate
-`dns.filter` setting is opt-in and defaults off. Its companion
-`dns.disable_ipv6` setting also defaults off. See its
-[README](dns-filter/README.md) for the Bun build/test commands and the
-ConnMan/firewall behavior.
+enabled blocks without treating `localhost` as blocked. The build always copies
+the helper into the IPK; the separate `dns.filter` setting is what activates it,
+and it defaults off. Its companion `dns.disable_ipv6` setting also defaults
+off. See its [README](dns-filter/README.md) for the Bun build/test commands and
+the ConnMan/firewall behavior.
 
 ## Install
 

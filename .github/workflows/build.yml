@@ -16,6 +16,10 @@ jobs:
         with:
           node-version: 20
 
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: dns-filter/package.json
+
       - name: Install ares CLI
         run: npm install -g @webos-tools/cli
 
@@ -26,6 +30,7 @@ jobs:
         run: |
           node --check app/app.js
           for f in app/init/*.sh; do sh -n "$f"; done
+          sh -n dns-filter/scripts/tv-handoff.sh
 
       - name: Build IPK
         run: ./build.sh
