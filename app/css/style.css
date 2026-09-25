@@ -299,6 +299,23 @@ button:disabled { opacity: 0.4; }
 .layer-text b { font-size: 1.9vh; font-weight: 600; }
 .layer-text small { font-size: 1.4vh; color: var(--dim); line-height: 1.2; }
 
+.logview {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.logview[hidden] { display: none; }
+
+.logview h2 {
+  flex: 0 0 auto;
+  margin: 0 0 1vh;
+  font-size: 1.7vh;
+  font-weight: 600;
+  color: var(--dim);
+}
+
 .console {
   flex: 1;
   min-height: 0;
@@ -306,10 +323,32 @@ button:disabled { opacity: 0.4; }
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 1.2vh 1.2vw;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Styling ::-webkit-scrollbar forces a classic track, which is what keeps
+     the scrollbar drawn on Chromium webOS builds that default to overlay. */
+  scrollbar-width: auto;
+  scrollbar-color: #4A585E #12171A;
+  -ms-overflow-style: scrollbar;
 }
 
-.console[hidden] { display: none; }
+.console::-webkit-scrollbar { width: 0.7vw; }
+
+.console::-webkit-scrollbar-track { background: #12171A; }
+
+.console::-webkit-scrollbar-thumb {
+  background: #4A585E;
+  border-radius: 0.35vw;
+}
+
+.console::-webkit-scrollbar-thumb:hover,
+.console::-webkit-scrollbar-thumb:focus { background: var(--dim); }
+
+.console:focus {
+  outline: none;
+  border-color: var(--paper);
+  box-shadow: 0 0 0 0.5vh rgba(236, 230, 216, 0.55);
+}
 
 #out {
   margin: 0;

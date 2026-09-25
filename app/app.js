@@ -7,6 +7,7 @@
     var appEl = document.getElementById('app');
     var consoleEl = document.getElementById('console');
     var out = document.getElementById('out');
+    var logView = document.getElementById('logview');
     var enabled = false;
     var dirty = false;
     var restoreFocus = null;
@@ -14,26 +15,66 @@
     var statusPollTimer = null;
     var lastStatus = null;
     var navigationRowsCache = null;
+    var logBtn = document.getElementById('btn-log');
+    // Cap the retained log; the oldest lines are dropped past this.
+    var MAX_LOG_LINES = 2000;
+    var logLines = [];
     function errmsg(e) {
         return e instanceof Error ? e.message : String(e);
     }
     function showConsole(show) {
-        consoleEl.hidden = !show;
+        logView.hidden = !show;
         var layers = document.getElementById('layers');
         if (layers)
             layers.hidden = show;
         invalidateNavigation();
-        var b = document.getElementById('btn-log');
-        if (b)
-            b.textContent = show ? 'Hide log' : 'Show log';
+        if (show)
+            scrollConsoleToBottom();
+        if (logBtn)
+            logBtn.textContent = show ? 'Hide log' : 'Show log';
     }
+    // One text node per line, trimmed to MAX_LOG_LINES, so the buffer is not
+    // re-parsed on every append and cannot grow for the whole session.
     function log(line) {
         if (!line && line !== 0)
             return;
+        var stick = consoleAtBottom();
         var t = new Date().toLocaleTimeString();
-        out.textContent = (out.textContent || '') + '[' + t + '] ' + line + '\n';
-        consoleEl.scrollTop = consoleEl.scrollHeight;
+        var node = document.createTextNode('[' + t + '] ' + line + '\n');
+        out.appendChild(node);
+        logLines.push(node);
+        while (logLines.length > MAX_LOG_LINES) {
+            var old = logLines.shift();
+            if (old.parentNode)
+                old.parentNode.removeChild(old);
+        }
+        if (stick)
+            scrollConsoleToBottom();
     }
+    function maxConsoleScroll() {
+        return Math.max(0, consoleEl.scrollHeight - consoleEl.clientHeight);
+    }
+    function consoleAtBottom(slack) {
+        if (consoleEl.clientHeight === 0)
+            return true;
+        return consoleEl.scrollTop >= maxConsoleScroll() - (slack || 8);
+    }
+    function scrollConsoleToBottom() {
+        if (consoleEl.clientHeight === 0)
+            return;
+        consoleEl.scrollTop = maxConsoleScroll();
+    }
+    // True when the view actually moved, so a keypress at either end of the
+    // buffer can hand focus back to the buttons instead of spinning.
+    function scrollConsoleBy(delta) {
+        var before = consoleEl.scrollTop;
+        consoleEl.scrollTop = before + delta;
+        return consoleEl.scrollTop !== before;
+    }
+    // Arriving at the log parks it on the newest line.
+    consoleEl.addEventListener('focus', function () {
+        scrollConsoleToBottom();
+    });
     // luna call, returns a promise that resolves to the parsed JSON result
     function luna(url, params) {
         return new Promise(function (resolve, reject) {
@@ -363,15 +404,15 @@
     document.getElementById('btn-refresh').addEventListener('click', function () {
         run('Refresh', refresh);
     });
-    document.getElementById('btn-log').addEventListener('click', function () {
-        showConsole(consoleEl.hidden);
+    logBtn.addEventListener('click', function () {
+        showConsole(logView.hidden);
     });
     // d-pad navigation
     function invalidateNavigation() {
         navigationRowsCache = null;
     }
     function focusables() {
-        return toArray(document.querySelectorAll('button:not([disabled])'))
+        return toArray(document.querySelectorAll('button:not([disabled]), #console'))
             .filter(function (el) { return el.offsetParent !== null; });
     }
     function focusElement(el) {
@@ -383,8 +424,10 @@
         catch (_error) {
             el.focus();
         }
+        // The layers list scrolls itself; anything else goes through
+        // scrollIntoView below.
         var scroller = document.querySelector('.layers');
-        if (scroller) {
+        if (scroller && scroller.contains(el)) {
             var top = el.__nospyNavTop;
             var bottom = el.__nospyNavBottom;
             if (typeof top === 'number' && typeof bottom === 'number') {
@@ -508,12 +551,37 @@
         });
         focusElement(best);
     }
+    // While the log holds focus the d-pad scrolls it instead of walking the
+    // button grid. The rocker reaches us as plain arrow keys on webOS builds
+    // where the Magic Remote's wheel is not forwarded to the app.
+    function consoleNav(dir) {
+        // The log wraps, so the horizontal axis is free to be the way out, and
+        // the toolbar toggle doubles as the escape once it relabels itself.
+        if (dir === 'left' || dir === 'right') {
+            focusElement(logBtn);
+            return;
+        }
+        // Page by four fifths of the view so pages share some context.
+        var step = Math.max(40, Math.round(consoleEl.clientHeight * 0.8));
+        if (dir === 'down') {
+            scrollConsoleBy(step);
+            return;
+        }
+        if (scrollConsoleBy(-step) || consoleEl.scrollTop > 0)
+            return;
+        focusElement(logBtn);
+    }
     window.addEventListener('resize', invalidateNavigation, true);
     var KEY_DIR = { 37: 'left', 38: 'up', 39: 'right', 40: 'down' };
     document.addEventListener('keydown', function (e) {
-        if (KEY_DIR[e.keyCode]) {
+        var dir = KEY_DIR[e.keyCode];
+        if (dir) {
             e.preventDefault();
-            moveFocus(KEY_DIR[e.keyCode]);
+            if (document.activeElement === consoleEl) {
+                consoleNav(dir);
+                return;
+            }
+            moveFocus(dir);
             return;
         }
         if (e.keyCode === 13 || e.keyCode === 32) {

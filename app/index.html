@@ -105,9 +105,12 @@
         </div>
       </section>
 
-      <section class="console" id="console" hidden>
-        <pre id="out"></pre>
-      </section>
+      <div class="logview" id="logview" hidden>
+        <h2>Log</h2>
+        <section class="console" id="console" tabindex="0" role="log" aria-label="Log output">
+          <pre id="out"></pre>
+        </section>
+      </div>
     </section>
   </main>
   <script src="app.js"></script>
