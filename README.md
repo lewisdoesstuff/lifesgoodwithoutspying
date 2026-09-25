@@ -13,6 +13,9 @@ TVs: ad delivery, Automatic Content Recognition, and always-on voice capture.
 > Supported on **webOS 5 and newer**. Only *tested* on **webOS 23 (9)** so far —
 > webOS 5+ reported working okay
 
+> [!WARNING]
+> Enabling the 'Voice Services' toggle may cause a ~10s delay opening the settings menu on some webOS versions.  
+
 ## Features
 
 - Blackholes LG ad / ACR / telemetry domains to loopback by bind-mounting a
