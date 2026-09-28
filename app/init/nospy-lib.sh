@@ -147,13 +147,34 @@ hosts_state() {
     fi
 }
 
-# Run a command with a timeout when one is available to avoid a hang blocking boot
-bounded() {
-    if command -v timeout >/dev/null 2>&1; then
-        timeout 10 "$@"
+# BusyBox's timeout takes the duration as a bare SECS argument in 1.35 (webOS 9)
+# but only as "-t SECS" in 1.29 (webOS 5/6), and each rejects the other's form
+# outright. The wrong form exits 127 without ever running the command, so ask
+# this build which one it accepts instead of assuming. Probed once per process.
+TIMEOUT_STYLE=""
+
+detect_timeout_style() {
+    [ -n "$TIMEOUT_STYLE" ] && return 0
+    if ! command -v timeout >/dev/null 2>&1; then
+        TIMEOUT_STYLE=none
+    elif timeout 1 sh -c : >/dev/null 2>&1; then
+        TIMEOUT_STYLE=bare
+    elif timeout -t 1 sh -c : >/dev/null 2>&1; then
+        TIMEOUT_STYLE=flag
     else
-        "$@"
+        TIMEOUT_STYLE=none
     fi
+    return 0
+}
+
+# Run a command with a timeout when one is usable to avoid a hang blocking boot
+bounded() {
+    detect_timeout_style
+    case "$TIMEOUT_STYLE" in
+        bare) timeout 10 "$@" ;;
+        flag) timeout -t 10 "$@" ;;
+        *) "$@" ;;
+    esac
 }
 
 # Process targets.

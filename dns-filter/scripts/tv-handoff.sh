@@ -43,8 +43,44 @@ ORIGINAL_NAMESERVERS=""
 ORIGINAL_IPV6=""
 FIREWALL_STARTED=0
 
+# BusyBox's timeout takes the duration as a bare SECS argument in 1.35 (webOS 9)
+# but only as "-t SECS" in 1.29 (webOS 5/6), and each rejects the other's form
+# outright. The wrong form exits 127 without ever running the command, so ask
+# this build which one it accepts instead of assuming. Probed once per process.
+# Duplicated from nospy-lib.sh so this script stays standalone.
+TIMEOUT_STYLE=""
+
 log() {
     echo "dns-filter: $*"
+}
+
+detect_timeout_style() {
+    [ -n "$TIMEOUT_STYLE" ] && return 0
+    if ! command -v timeout >/dev/null 2>&1; then
+        TIMEOUT_STYLE=none
+    elif timeout 1 sh -c : >/dev/null 2>&1; then
+        TIMEOUT_STYLE=bare
+    elif timeout -t 1 sh -c : >/dev/null 2>&1; then
+        TIMEOUT_STYLE=flag
+    else
+        TIMEOUT_STYLE=none
+    fi
+    if [ "$TIMEOUT_STYLE" = none ]; then
+        # stderr, because callers read this through a command substitution.
+        log "no usable timeout on this build; running without a time limit" >&2
+    fi
+    return 0
+}
+
+# Run a command with a timeout when one is usable, so one slow helper call
+# cannot stall an apply or a boot hook.
+bounded() {
+    detect_timeout_style
+    case "$TIMEOUT_STYLE" in
+        bare) timeout 10 "$@" ;;
+        flag) timeout -t 10 "$@" ;;
+        *) "$@" ;;
+    esac
 }
 
 die() {
@@ -353,7 +389,7 @@ status_value() {
 }
 
 artifact_check_output() {
-    timeout 10 "$NODE" "$BUNDLE" \
+    bounded "$NODE" "$BUNDLE" \
         --listen-address "$LISTEN_ADDRESS" \
         --listen-port 53 \
         --upstream "$UPSTREAM:53" \
@@ -362,14 +398,33 @@ artifact_check_output() {
         --check 2>&1
 }
 
+# The check's own output is the only description of the failure, and the callers
+# discard it. Keep the head of it: a config error also prints the usage text.
+log_artifact_output() {
+    if [ -z "$1" ]; then
+        log "artifact check produced no output"
+        return 0
+    fi
+    printf '%s\n' "$1" | head -n 6 | while IFS= read -r line; do
+        log "check: $line"
+    done
+}
+
 artifact_metadata() {
-    output="$(artifact_check_output)" || return 1
+    output="$(artifact_check_output)"
+    result=$?
+    if [ "$result" -ne 0 ]; then
+        log_artifact_output "$output"
+        return 1
+    fi
     generation="$(printf '%s\n' "$output" | sed -n 's/.*generation=\([^;]*\);.*/\1/p')"
     declared="$(printf '%s\n' "$output" | sed -n 's/.*declared_rules=\([^;]*\);.*/\1/p')"
     unique="$(printf '%s\n' "$output" | sed -n 's/^ok: \([0-9][0-9]*\) blocklist rule(s).*/\1/p')"
-    [ -n "$generation" ] && [ "$generation" != "unknown" ] || return 1
-    [ -n "$declared" ] && [ "$declared" != "unknown" ] || return 1
-    [ -n "$unique" ] || return 1
+    if [ -z "$generation" ] || [ "$generation" = "unknown" ] ||
+        [ -z "$declared" ] || [ "$declared" = "unknown" ] || [ -z "$unique" ]; then
+        log_artifact_output "$output"
+        return 1
+    fi
     printf '%s %s %s\n' "$generation" "$declared" "$unique"
 }
 
@@ -377,7 +432,6 @@ helper_start() {
     [ -f "$BUNDLE" ] || die "DNS bundle not found: $BUNDLE"
     [ -f "$BLOCKLIST" ] || die "generated blocklist not found: $BLOCKLIST"
     require_command "$NODE"
-    require_command timeout
 
     metadata="$(artifact_metadata)" || die "DNS artifact check failed"
     expected_generation="$(printf '%s\n' "$metadata" | awk '{print $1}')"
