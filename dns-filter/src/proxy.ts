@@ -3,7 +3,7 @@ import * as dns from 'dns';
 import * as net from 'net';
 import { Blocklist, BlocklistMetadata, loadBlocklist } from './blocklist';
 import { FilterConfig } from './config';
-import { makeNxDomainResponse, parseDnsQuery } from './dns';
+import { DnsQuery, makeErrorResponse, makeNxDomainResponse, RCODE_SERVFAIL, parseDnsQuery } from './dns';
 
 export const MAX_TCP_PAYLOAD = 65535;
 export const MAX_TCP_BUFFER = (MAX_TCP_PAYLOAD + 2) * 2;
@@ -24,6 +24,8 @@ interface UdpClient {
 interface PendingUdp {
   client: UdpClient;
   clientId: number;
+  query: Buffer;
+  parsed: DnsQuery;
   timer: any;
 }
 
@@ -251,10 +253,10 @@ export class DnsFilterProxy {
       return;
     }
 
-    this.forwardUdp(message, remote);
+    this.forwardUdp(message, query, remote);
   }
 
-  private forwardUdp(message: Buffer, remote: any): void {
+  private forwardUdp(message: Buffer, parsed: DnsQuery, remote: any): void {
     const upstreamUdp = this.upstreamUdp;
     if (upstreamUdp === null) {
       return;
@@ -263,6 +265,7 @@ export class DnsFilterProxy {
     const upstreamId = this.allocateUpstreamId();
     if (upstreamId === null) {
       this.log('dropped UDP query because all upstream IDs are in use');
+      this.sendUdpFailure(message, parsed, remote);
       return;
     }
 
@@ -271,6 +274,8 @@ export class DnsFilterProxy {
     const pending: PendingUdp = {
       client: { address: remote.address, port: remote.port },
       clientId: message.readUInt16BE(0),
+      query: message,
+      parsed: parsed,
       timer: null,
     };
     this.pendingUdp.set(upstreamId, pending);
@@ -278,6 +283,7 @@ export class DnsFilterProxy {
     pending.timer = setTimeout(() => {
       this.removePendingUdp(upstreamId, pending);
       this.log('upstream UDP timeout for ' + pending.client.address + ':' + pending.client.port);
+      this.sendUdpFailure(pending.query, pending.parsed, pending.client);
     }, this.config.timeoutMs);
 
     try {
@@ -291,13 +297,30 @@ export class DnsFilterProxy {
           if (error) {
             this.removePendingUdp(upstreamId, pending);
             this.log('upstream UDP send failed: ' + error.message);
+            this.sendUdpFailure(pending.query, pending.parsed, pending.client);
           }
         },
       );
     } catch (error) {
       this.removePendingUdp(upstreamId, pending);
       this.log('upstream UDP send threw: ' + asError(error).message);
+      this.sendUdpFailure(pending.query, pending.parsed, pending.client);
     }
+  }
+
+  /**
+   * A client that gets no answer at all retries until its own timeout expires,
+   * so every path that cannot forward a query still answers SERVFAIL. A
+   * negative answer lets the stub resolver fail fast and retry elsewhere
+   * instead of hanging.
+   */
+  private sendUdpFailure(query: Buffer, parsed: DnsQuery, client: UdpClient): void {
+    const response = makeErrorResponse(query, parsed, RCODE_SERVFAIL);
+    if (response === null) {
+      this.log('could not synthesize a response for ' + parsed.name);
+      return;
+    }
+    this.sendUdp(response, client.port, client.address);
   }
 
   private handleUpstreamUdp(message: Buffer): void {
@@ -452,7 +475,19 @@ export class DnsFilterProxy {
       return;
     }
 
-    this.forwardTcp(query, callback);
+    this.forwardTcp(query, (response: Buffer | null) => {
+      // An unanswered TCP query leaves the client waiting for its own timeout,
+      // so a failed forward still gets a SERVFAIL.
+      if (response !== null) {
+        callback(response);
+        return;
+      }
+      const failure = makeErrorResponse(query, parsed, RCODE_SERVFAIL);
+      if (failure === null) {
+        this.log('could not synthesize a response for ' + parsed.name);
+      }
+      callback(failure);
+    });
   }
 
   private forwardTcp(query: Buffer, callback: (response: Buffer | null) => void): void {

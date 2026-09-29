@@ -3,6 +3,9 @@ export interface DnsQuestion {
   end: number;
 }
 
+export const RCODE_SERVFAIL = 2;
+export const RCODE_NXDOMAIN = 3;
+
 export interface DnsQuery {
   id: number;
   flags: number;
@@ -173,11 +176,11 @@ export function parseDnsQuery(message: Buffer): DnsQuery | null {
 }
 
 /**
- * Build a minimal NXDOMAIN response containing the original question. This
+ * Build a minimal error response containing the original question. This
  * deliberately drops EDNS and additional sections rather than copying
  * attacker-controlled records into a response generated locally.
  */
-export function makeNxDomainResponse(query: Buffer, parsed: DnsQuery): Buffer | null {
+export function makeErrorResponse(query: Buffer, parsed: DnsQuery, rcode: number): Buffer | null {
   if (parsed.questionCount !== 1 || parsed.questionEnd > query.length) {
     return null;
   }
@@ -186,9 +189,9 @@ export function makeNxDomainResponse(query: Buffer, parsed: DnsQuery): Buffer | 
   const response = Buffer.alloc(12 + questionLength);
   query.copy(response, 0, 0, 2);
 
-  // QR + the client's RD bit + NXDOMAIN. Other response bits are controlled by
-  // this helper and are intentionally not echoed from the query.
-  response.writeUInt16BE(0x8000 | (parsed.flags & 0x0100) | 0x0003, 2);
+  // QR + the client's RD bit + the rcode. Other response bits are controlled
+  // by this helper and are intentionally not echoed from the query.
+  response.writeUInt16BE(0x8000 | (parsed.flags & 0x0100) | (rcode & 0x000f), 2);
   response.writeUInt16BE(1, 4);
   response.writeUInt16BE(0, 6);
   response.writeUInt16BE(0, 8);
@@ -196,4 +199,8 @@ export function makeNxDomainResponse(query: Buffer, parsed: DnsQuery): Buffer | 
   query.copy(response, 12, 12, parsed.questionEnd);
 
   return response;
+}
+
+export function makeNxDomainResponse(query: Buffer, parsed: DnsQuery): Buffer | null {
+  return makeErrorResponse(query, parsed, RCODE_NXDOMAIN);
 }

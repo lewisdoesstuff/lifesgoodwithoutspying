@@ -37,6 +37,22 @@ function listenUpstream(): Promise<Upstream> {
   });
 }
 
+function listenSilentUpstream(): Promise<Upstream> {
+  return new Promise((resolve, reject) => {
+    const socket = dgram.createSocket('udp4');
+    const queries: Buffer[] = [];
+    // Accept the query and never answer it, so the proxy has to time out.
+    socket.on('message', (message) => {
+      queries.push(Buffer.from(message));
+    });
+    socket.once('error', reject);
+    socket.bind(0, '127.0.0.1', () => {
+      const address = socket.address() as any;
+      resolve({ socket, port: address.port, queries });
+    });
+  });
+}
+
 function listenTcpUpstream(): Promise<TcpUpstream> {
   return new Promise((resolve, reject) => {
     const queries: Buffer[] = [];
@@ -61,6 +77,24 @@ function listenTcpUpstream(): Promise<TcpUpstream> {
           response.copy(frame, 2);
           socket.write(frame);
         }
+      });
+      socket.on('error', () => undefined);
+    });
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address() as any;
+      resolve({ server, port: address.port, queries });
+    });
+  });
+}
+
+function listenSilentTcpUpstream(): Promise<TcpUpstream> {
+  return new Promise((resolve, reject) => {
+    const queries: Buffer[] = [];
+    const server = net.createServer((socket) => {
+      // Accept the query and never answer it, so the proxy has to time out.
+      socket.on('data', (chunk) => {
+        queries.push(Buffer.from(chunk));
       });
       socket.on('error', () => undefined);
     });
@@ -310,6 +344,59 @@ describe('DnsFilterProxy', () => {
       await stopProxy(proxy);
       await closeSocket(client);
       await closeSocket(upstream.socket);
+    }
+  }, 10000);
+
+  it('answers SERVFAIL instead of leaving the client hanging on upstream UDP timeout', async () => {
+    const upstream = await listenSilentUpstream();
+    const config: FilterConfig = {
+      listenAddress: '127.0.0.1',
+      listenPort: 0,
+      upstream: { host: '127.0.0.1', port: upstream.port },
+      blocklistPath: 'unused-in-test',
+      blocklistFormat: 'domains',
+      timeoutMs: 300,
+      logBlocked: false,
+    };
+    const proxy = new DnsFilterProxy(config, new Blocklist([]));
+    const client = dgram.createSocket('udp4');
+
+    try {
+      await startProxy(proxy);
+      const response = await sendQuery(client, proxy.getListenPort(), queryFor('slow.example.test', 0x4001));
+      expect(response.readUInt16BE(0)).toBe(0x4001);
+      expect(response.readUInt16BE(2) & 0x8000).toBe(0x8000);
+      expect(response.readUInt16BE(2) & 0x000f).toBe(2);
+      expect(upstream.queries).toHaveLength(1);
+    } finally {
+      await stopProxy(proxy);
+      await closeSocket(client);
+      await closeSocket(upstream.socket);
+    }
+  }, 10000);
+
+  it('answers SERVFAIL over TCP when the upstream accepts but never replies', async () => {
+    const upstream = await listenSilentTcpUpstream();
+    const config: FilterConfig = {
+      listenAddress: '127.0.0.1',
+      listenPort: 0,
+      upstream: { host: '127.0.0.1', port: upstream.port },
+      blocklistPath: 'unused-in-test',
+      blocklistFormat: 'domains',
+      timeoutMs: 300,
+      logBlocked: false,
+    };
+    const proxy = new DnsFilterProxy(config, new Blocklist([]));
+
+    try {
+      await startProxy(proxy);
+      const response = await sendTcpQuery(proxy.getListenPort(), queryFor('slow.example.test', 0x4002));
+      expect(response.readUInt16BE(0)).toBe(0x4002);
+      expect(response.readUInt16BE(2) & 0x8000).toBe(0x8000);
+      expect(response.readUInt16BE(2) & 0x000f).toBe(2);
+    } finally {
+      await stopProxy(proxy);
+      await closeServer(upstream.server);
     }
   }, 10000);
 
