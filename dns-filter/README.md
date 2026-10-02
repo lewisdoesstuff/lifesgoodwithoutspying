@@ -30,7 +30,7 @@ acknowledged blocklist-reload protocol.
 ## Run
 
 The listener defaults to `127.0.0.2:5353` to avoid accidentally taking over
-ConnMan's `127.0.0.1:53` during development. Port 53 and a root listener are
+during development. Port 53 and a root listener are
 intentionally explicit:
 
 ```sh
