@@ -42,6 +42,7 @@ export class DnsFilterProxy {
   private readonly pendingUdp = new Map<number, PendingUdp>();
   private readonly tcpClients: net.Socket[] = [];
   private nextUpstreamId = 0;
+  private nextUpstreamTcpPortIndex = 0;
   private readonly tcpUpstreams: net.Socket[] = [];
 
   private udp: dgram.Socket | null = null;
@@ -494,19 +495,9 @@ export class DnsFilterProxy {
   }
 
   private forwardTcp(query: Buffer, callback: (response: Buffer | null) => void): void {
-    let upstream: net.Socket;
-    try {
-      upstream = net.createConnection({
-        host: this.upstreamAddress,
-        port: this.config.upstream.port,
-      });
-    } catch (error) {
-      this.log('upstream TCP connect threw: ' + asError(error).message);
-      callback(null);
-      return;
-    }
-
-    this.tcpUpstreams.push(upstream);
+    const maxAttempts = 3;
+    let attempts = 0;
+    let upstream: net.Socket | null = null;
     let responseBuffer = Buffer.alloc(0);
     let finished = false;
     let timer: any = null;
@@ -519,11 +510,13 @@ export class DnsFilterProxy {
       if (timer !== null) {
         clearTimeout(timer);
       }
-      const index = this.tcpUpstreams.indexOf(upstream);
-      if (index !== -1) {
-        this.tcpUpstreams.splice(index, 1);
+      if (upstream !== null) {
+        const index = this.tcpUpstreams.indexOf(upstream);
+        if (index !== -1) {
+          this.tcpUpstreams.splice(index, 1);
+        }
+        upstream.destroy();
       }
-      upstream.destroy();
       if (error) {
         this.log('upstream TCP error: ' + error.message);
         callback(null);
@@ -532,44 +525,93 @@ export class DnsFilterProxy {
       }
     };
 
+    const attempt = () => {
+      attempts += 1;
+      responseBuffer = Buffer.alloc(0);
+      const options: any = {
+        host: this.upstreamAddress,
+        port: this.config.upstream.port,
+      };
+      const localPort = this.allocateUpstreamTcpPort();
+      if (localPort !== undefined) {
+        options.localPort = localPort;
+      }
+
+      try {
+        upstream = net.createConnection(options);
+      } catch (error) {
+        this.log('upstream TCP connect threw: ' + asError(error).message);
+        callback(null);
+        return;
+      }
+
+      this.tcpUpstreams.push(upstream);
+
+      upstream.setTimeout(this.config.timeoutMs, () => {
+        finish(new Error('upstream TCP socket timeout'));
+      });
+      upstream.once('error', (error: any) => {
+        // Source port already in use means TIME_WAIT collision; pick the next
+        // port from the pool before giving up.
+        if (error && error.code === 'EADDRINUSE' && attempts < maxAttempts) {
+          const index = this.tcpUpstreams.indexOf(upstream!);
+          if (index !== -1) {
+            this.tcpUpstreams.splice(index, 1);
+          }
+          upstream!.destroy();
+          attempt();
+          return;
+        }
+        finish(error);
+      });
+      upstream.once('connect', () => {
+        const frame = makeTcpFrame(query);
+        try {
+          upstream!.write(frame);
+        } catch (error) {
+          finish(asError(error));
+        }
+      });
+      upstream.on('data', (chunk: Buffer) => {
+        responseBuffer = Buffer.concat([responseBuffer, chunk]);
+        if (responseBuffer.length > MAX_TCP_BUFFER) {
+          finish(new Error('oversized upstream TCP DNS response'));
+          return;
+        }
+
+        const length = socketBufferLength(responseBuffer);
+        if (length === null) {
+          finish(new Error('invalid upstream TCP DNS length'));
+          return;
+        }
+        if (responseBuffer.length < length + 2) {
+          return;
+        }
+        if (responseBuffer.readUInt16BE(2) !== query.readUInt16BE(0)) {
+          finish(new Error('upstream TCP DNS response ID mismatch'));
+          return;
+        }
+
+        finish(undefined, responseBuffer.slice(2, length + 2));
+      });
+    };
+
     timer = setTimeout(() => {
       finish(new Error('upstream TCP timeout'));
     }, this.config.timeoutMs);
 
-    upstream.setTimeout(this.config.timeoutMs, () => {
-      finish(new Error('upstream TCP socket timeout'));
-    });
-    upstream.once('error', (error: Error) => finish(error));
-    upstream.once('connect', () => {
-      const frame = makeTcpFrame(query);
-      try {
-        upstream.write(frame);
-      } catch (error) {
-        finish(asError(error));
-      }
-    });
-    upstream.on('data', (chunk: Buffer) => {
-      responseBuffer = Buffer.concat([responseBuffer, chunk]);
-      if (responseBuffer.length > MAX_TCP_BUFFER) {
-        finish(new Error('oversized upstream TCP DNS response'));
-        return;
-      }
+    attempt();
+  }
 
-      const length = socketBufferLength(responseBuffer);
-      if (length === null) {
-        finish(new Error('invalid upstream TCP DNS length'));
-        return;
-      }
-      if (responseBuffer.length < length + 2) {
-        return;
-      }
-      if (responseBuffer.readUInt16BE(2) !== query.readUInt16BE(0)) {
-        finish(new Error('upstream TCP DNS response ID mismatch'));
-        return;
-      }
-
-      finish(undefined, responseBuffer.slice(2, length + 2));
-    });
+  private allocateUpstreamTcpPort(): number | undefined {
+    const start = this.config.upstreamTcpPortStart;
+    const end = this.config.upstreamTcpPortEnd;
+    if (start === undefined || end === undefined) {
+      return undefined;
+    }
+    const span = end - start + 1;
+    this.nextUpstreamTcpPortIndex = (this.nextUpstreamTcpPortIndex + 1) % span;
+    return start + this.nextUpstreamTcpPortIndex;
   }
 
   private logBlocked(name: string): void {

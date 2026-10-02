@@ -46,6 +46,8 @@ SERVICE_TIMEOUT_SECONDS="${NOSPY_DNS_SERVICE_TIMEOUT_SECONDS:-30}"
 HELPER_ADDRESS="${NOSPY_DNS_HELPER_ADDRESS:-127.0.0.1}"
 HELPER_PORT="${NOSPY_DNS_HELPER_PORT:-5354}"
 HELPER_UPSTREAM_SPORT="${NOSPY_DNS_HELPER_UPSTREAM_SPORT:-15354}"
+HELPER_UPSTREAM_TCP_PORT_START="${NOSPY_DNS_HELPER_UPSTREAM_TCP_PORT_START:-15355}"
+HELPER_UPSTREAM_TCP_PORT_END="${NOSPY_DNS_HELPER_UPSTREAM_TCP_PORT_END:-15483}"
 
 SERVICE=""
 SETTINGS=""
@@ -399,6 +401,8 @@ artifact_check_output() {
         --listen-port "$HELPER_PORT" \
         --upstream "$UPSTREAM:53" \
         --upstream-bind-port "$HELPER_UPSTREAM_SPORT" \
+        --upstream-tcp-port-start "$HELPER_UPSTREAM_TCP_PORT_START" \
+        --upstream-tcp-port-end "$HELPER_UPSTREAM_TCP_PORT_END" \
         --blocklist "$BLOCKLIST" \
         --blocklist-format "$BLOCKLIST_FORMAT" \
         --check 2>&1
@@ -461,6 +465,8 @@ helper_start() {
         --listen-port "$HELPER_PORT" \
         --upstream "$UPSTREAM:53" \
         --upstream-bind-port "$HELPER_UPSTREAM_SPORT" \
+        --upstream-tcp-port-start "$HELPER_UPSTREAM_TCP_PORT_START" \
+        --upstream-tcp-port-end "$HELPER_UPSTREAM_TCP_PORT_END" \
         --blocklist "$BLOCKLIST" \
         --blocklist-format "$BLOCKLIST_FORMAT" \
         --status-file "$STATUS_FILE" \
@@ -584,17 +590,27 @@ nat_on() {
         nat_off || true
         die "cannot exempt the helper upstream UDP socket"
     }
+    iptables -t nat -A OUTPUT -p tcp --dport 53 -m tcp --sport "$HELPER_UPSTREAM_TCP_PORT_START:$HELPER_UPSTREAM_TCP_PORT_END" -j ACCEPT || {
+        nat_off || true
+        die "cannot exempt the helper upstream TCP sockets"
+    }
     iptables -t nat -A OUTPUT -p udp --dport 53 -j DNAT --to-destination "$HELPER_ADDRESS:$HELPER_PORT" || {
         nat_off || true
         die "cannot install DNS divert"
     }
+    iptables -t nat -A OUTPUT -p tcp --dport 53 -j DNAT --to-destination "$HELPER_ADDRESS:$HELPER_PORT" || {
+        nat_off || true
+        die "cannot install DNS divert"
+    }
     NAT_STARTED=1
-    log "DNS divert active: outbound UDP port 53 diverted to $HELPER_ADDRESS:$HELPER_PORT; helper upstream pins source port $HELPER_UPSTREAM_SPORT"
+    log "DNS divert active: outbound UDP/TCP port 53 diverted to $HELPER_ADDRESS:$HELPER_PORT; helper upstream pins UDP source port $HELPER_UPSTREAM_SPORT and rotates TCP source ports $HELPER_UPSTREAM_TCP_PORT_START:$HELPER_UPSTREAM_TCP_PORT_END"
 }
 
 nat_off() {
     iptables -t nat -D OUTPUT -p udp --dport 53 -m udp --sport "$HELPER_UPSTREAM_SPORT" -j ACCEPT 2>/dev/null || true
+    iptables -t nat -D OUTPUT -p tcp --dport 53 -m tcp --sport "$HELPER_UPSTREAM_TCP_PORT_START:$HELPER_UPSTREAM_TCP_PORT_END" -j ACCEPT 2>/dev/null || true
     iptables -t nat -D OUTPUT -p udp --dport 53 -j DNAT --to-destination "$HELPER_ADDRESS:$HELPER_PORT" 2>/dev/null || true
+    iptables -t nat -D OUTPUT -p tcp --dport 53 -j DNAT --to-destination "$HELPER_ADDRESS:$HELPER_PORT" 2>/dev/null || true
     NAT_STARTED=0
 }
 

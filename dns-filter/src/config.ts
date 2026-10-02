@@ -16,6 +16,8 @@ export interface FilterConfig {
   timeoutMs: number;
   logBlocked: boolean;
   upstreamBindPort?: number;
+  upstreamTcpPortStart?: number;
+  upstreamTcpPortEnd?: number;
 }
 
 export interface ParsedArgs {
@@ -125,6 +127,8 @@ export function parseArgs(args: string[]): ParsedArgs {
   let help = false;
   let check = false;
   let upstreamBindPort: number | undefined;
+  let upstreamTcpPortStart: number | undefined;
+  let upstreamTcpPortEnd: number | undefined;
 
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
@@ -189,6 +193,12 @@ export function parseArgs(args: string[]): ParsedArgs {
       case '--upstream-bind-port':
         upstreamBindPort = parsePort(value, option, false);
         break;
+      case '--upstream-tcp-port-start':
+        upstreamTcpPortStart = parsePort(value, option, false);
+        break;
+      case '--upstream-tcp-port-end':
+        upstreamTcpPortEnd = parsePort(value, option, false);
+        break;
       default:
         throw new ConfigError('unknown option: ' + option);
     }
@@ -207,6 +217,16 @@ export function parseArgs(args: string[]): ParsedArgs {
   if (blocklistPath === undefined || blocklistPath.trim() === '') {
     throw new ConfigError('--blocklist is required');
   }
+  if ((upstreamTcpPortStart === undefined) !== (upstreamTcpPortEnd === undefined)) {
+    throw new ConfigError('--upstream-tcp-port-start requires --upstream-tcp-port-end');
+  }
+  if (
+    upstreamTcpPortStart !== undefined &&
+    upstreamTcpPortEnd !== undefined &&
+    upstreamTcpPortEnd < upstreamTcpPortStart
+  ) {
+    throw new ConfigError('--upstream-tcp-port-end must be >= --upstream-tcp-port-start');
+  }
 
   return {
     help: false,
@@ -221,6 +241,8 @@ export function parseArgs(args: string[]): ParsedArgs {
       timeoutMs,
       logBlocked,
       upstreamBindPort,
+      upstreamTcpPortStart,
+      upstreamTcpPortEnd,
     },
   };
 }
@@ -241,6 +263,8 @@ export function usage(): string {
     '  --timeout MS             Upstream timeout (default: 5000)',
     '  --log-blocked            Log blocked domain names',
     '  --upstream-bind-port N   Pin the UDP upstream socket source port',
+    '  --upstream-tcp-port-start N  Rotate the per-connection TCP upstream port',
+    '  --upstream-tcp-port-end N    Last port in that rotation (defaults 15354:15483)',
     '  --check                  Validate configuration and blocklist, then exit',
     '  -h, --help               Show this help',
   ].join('\n');

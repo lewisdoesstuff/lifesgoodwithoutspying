@@ -103,12 +103,11 @@ port-53 divert at the host level rather than ConnMan nameserver overrides:
 - optionally disables the service's IPv6 configuration when the app's separate
   `dns.disable_ipv6` companion switch is on;
 - runs the filter on `127.0.0.1:5353`;
-- NATs outbound UDP port-53 queries to that helper, so ConnMan's resolver
-  traffic and every other local DNS attempt is filtered;
-- the helper's single outstanding upstream UDP socket is exempted from the
-  divert by binding it to the unprivileged, non-ephemeral source port 15354.
-  (TCP DNS is intentionally not diverted, on webOS 6 the apps almost always use
-  UDP DNS through ConnMan);
+- NATs outbound UDP and TCP port-53 queries to that helper, so ConnMan's
+  resolver traffic and every other local DNS attempt is filtered;
+- the helper's own upstream sockets are exempted from the divert: its UDP
+  upstream source port is pinned to 15354 and its TCP upstream source ports
+  rotate across 15355:15483;
 - restores ConnMan's IPv6 setting and removes the NAT rules on disable. If
   ConnMan does not report the original value back, the handoff keeps its
   state/helper for a later retry instead of claiming a successful rollback.
@@ -144,6 +143,6 @@ cannot block DNS-over-TLS, DNS-over-HTTPS, direct-IP connections, or a process
 that uses a custom encrypted resolver. If the helper exits unexpectedly while
 enabled, locally generated port-53 queries remain bound to the redirect rules
 until the NAT rules are rolled back; this fails closed but can cause a DNS
-outage. The NAT divert only covers outbound IPv4 UDP port 53; TCP DNS and IPv6
-traffic are not caught by it. The existing hosts mount and executable stubs
-remain useful defense-in-depth layers.
+outage. The NAT divert only covers outbound IPv4 UDP/TCP port 53; IPv6 traffic
+is not caught by it. The existing hosts mount and executable stubs remain
+useful defense-in-depth layers.
