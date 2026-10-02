@@ -1,9 +1,18 @@
 #!/bin/sh
-# Controlled ConnMan -> local DNS filter handoff for the webOS TV.
+# Controlled DNS filter handoff for the webOS TV.
+#
+# All outbound UDP and TCP traffic destined for port 53 is diverted by the
+# nat OUTPUT chain into a local filtering helper. This includes the DNS
+# queries ConnMan's DNS proxy makes on behalf of every app. ConnMan's DNS
+# settings are intentionally left alone: webOS 6's connmand does not
+# reliably route queries through a locally configured nameserver, which
+# made the previous handoff silently bypass the filter or break all DNS.
+#
+# The helper's own upstream queries are exempt from the redirect by
+# matching its owner uid in the OUTPUT chain.
 #
 # This script is intentionally separate from the normal webOS JS service. It
 # is called by the opt-in init hook only after the user enables the feature.
-# It keeps ConnMan running and changes only its per-service resolver settings.
 set -u
 
 PATH=/sbin:/bin:/usr/sbin:/usr/bin
@@ -15,9 +24,10 @@ SCRIPT_DIR="$(dirname "$SELF")"
 STATE_DIR="${NOSPY_DNS_STATE_DIR:-/var/lib/webosbrew}"
 BLOCKLIST="${NOSPY_DNS_BLOCKLIST:-$STATE_DIR/lifesgoodwithoutspying.dns}"
 BLOCKLIST_FORMAT="${NOSPY_DNS_BLOCKLIST_FORMAT:-domains}"
-STATUS_FILE="${NOSPY_DNS_STATUS_FILE:-$STATE_DIR/lifesgoodwithoutspying-dns-filter.status}"
+RUNTIME_DIR="${NOSPY_DNS_RUNTIME_DIR:-/tmp/nospy-dns-filter}"
+STATUS_FILE="${NOSPY_DNS_STATUS_FILE:-$RUNTIME_DIR/status}"
 PID_FILE="${NOSPY_DNS_PID_FILE:-$STATE_DIR/lifesgoodwithoutspying-dns-filter.pid}"
-LOG_FILE="${NOSPY_DNS_LOG_FILE:-$STATE_DIR/lifesgoodwithoutspying-dns-filter.log}"
+LOG_FILE="${NOSPY_DNS_LOG_FILE:-$RUNTIME_DIR/log}"
 STATE_FILE="${NOSPY_DNS_STATE_FILE:-$STATE_DIR/lifesgoodwithoutspying-dns-filter.state}"
 if [ -n "${NOSPY_DNS_BUNDLE:-}" ]; then
     BUNDLE="$NOSPY_DNS_BUNDLE"
@@ -29,10 +39,13 @@ else
     BUNDLE="$SCRIPT_DIR/nospy-dns-filter.js"
 fi
 NODE="${NOSPY_DNS_NODE:-node}"
-FIREWALL_CHAIN="${NOSPY_DNS_FIREWALL_CHAIN:-NOSPYDNS}"
+LEGACY_FIREWALL_CHAIN="${NOSPY_DNS_FIREWALL_CHAIN:-NOSPYDNS}"
 IPV6_MODE="${NOSPY_DNS_IPV6_MODE:-off}"
 TIMEOUT_SECONDS="${NOSPY_DNS_TIMEOUT_SECONDS:-8}"
 SERVICE_TIMEOUT_SECONDS="${NOSPY_DNS_SERVICE_TIMEOUT_SECONDS:-30}"
+HELPER_ADDRESS="${NOSPY_DNS_HELPER_ADDRESS:-127.0.0.1}"
+HELPER_PORT="${NOSPY_DNS_HELPER_PORT:-5353}"
+HELPER_UPSTREAM_SPORT="${NOSPY_DNS_HELPER_UPSTREAM_SPORT:-15354}"
 
 SERVICE=""
 SETTINGS=""
@@ -41,7 +54,8 @@ UPSTREAM=""
 INTERFACE=""
 ORIGINAL_NAMESERVERS=""
 ORIGINAL_IPV6=""
-FIREWALL_STARTED=0
+LEGACY_FIREWALL_STARTED=0
+NAT_STARTED=0
 
 # BusyBox's timeout takes the duration as a bare SECS argument in 1.35 (webOS 9)
 # but only as "-t SECS" in 1.29 (webOS 5/6), and each rejects the other's form
@@ -123,21 +137,23 @@ load_state() {
         off|preserve) ;;
         *) IPV6_MODE=off ;;
     esac
-    FIREWALL_STARTED="$(read_state_value FIREWALL_STARTED || echo 0)"
-    [ -n "$LISTEN_ADDRESS" ] && [ -n "$UPSTREAM" ] && [ -n "$INTERFACE" ]
+    LEGACY_FIREWALL_STARTED="$(read_state_value FIREWALL_STARTED || echo 0)"
+    NAT_STARTED="$(read_state_value NAT_STARTED || echo 0)"
+    [ -n "$INTERFACE" ] && [ -n "$UPSTREAM" ]
 }
 
 save_state() {
     mkdir -p "$STATE_DIR" || die "cannot create state directory: $STATE_DIR"
     {
         echo "SERVICE=$SERVICE"
-        echo "LISTEN_ADDRESS=$LISTEN_ADDRESS"
+        echo "LISTEN_ADDRESS=$HELPER_ADDRESS"
         echo "UPSTREAM=$UPSTREAM"
         echo "INTERFACE=$INTERFACE"
         echo "ORIGINAL_NAMESERVERS=$ORIGINAL_NAMESERVERS"
         echo "ORIGINAL_IPV6=$ORIGINAL_IPV6"
         echo "IPV6_MODE=$IPV6_MODE"
-        echo "FIREWALL_STARTED=$FIREWALL_STARTED"
+        echo "FIREWALL_STARTED=$LEGACY_FIREWALL_STARTED"
+        echo "NAT_STARTED=$NAT_STARTED"
     } > "$STATE_FILE.tmp" || die "cannot write state: $STATE_FILE"
     mv "$STATE_FILE.tmp" "$STATE_FILE" || die "cannot commit state: $STATE_FILE"
 }
@@ -285,21 +301,10 @@ discover_service_snapshot() {
     fi
     INTERFACE="$(printf '%s\n' "$props" | connman_property Ethernet Interface IPv4)"
     LISTEN_ADDRESS="$(printf '%s\n' "$props" | connman_property IPv4 Address IPv6)"
-    [ -n "$INTERFACE" ] && [ -n "$LISTEN_ADDRESS" ] || {
-        snapshot_fail "ConnMan service did not provide one Ethernet interface/address" 0
+    [ -n "$INTERFACE" ] || {
+        snapshot_fail "ConnMan service did not provide an Ethernet interface" 0
         return 1
     }
-    case "$LISTEN_ADDRESS" in
-        ''|*[!0-9.]*|0.0.0.0|127.*)
-            snapshot_fail "ConnMan service address is not usable as a listener: $LISTEN_ADDRESS" 0
-            return 1
-            ;;
-    esac
-    ip -4 -o addr show dev "$INTERFACE" 2>/dev/null |
-        grep -q " $LISTEN_ADDRESS/" || {
-            snapshot_fail "ConnMan address is not assigned to its reported interface" 0
-            return 1
-        }
 
     nameservers="$(printf '%s\n' "$props" | connman_nameservers)"
     ipv4_nameservers=""
@@ -323,7 +328,7 @@ EOF
     fi
     UPSTREAM="$ipv4_nameservers"
     case "$UPSTREAM" in
-        127.*|0.0.0.0|"$LISTEN_ADDRESS")
+        127.*|0.0.0.0)
             snapshot_fail "active ConnMan nameserver is not a safe upstream: $UPSTREAM" 0
             return 1
             ;;
@@ -390,9 +395,10 @@ status_value() {
 
 artifact_check_output() {
     bounded "$NODE" "$BUNDLE" \
-        --listen-address "$LISTEN_ADDRESS" \
-        --listen-port 53 \
+        --listen-address "$HELPER_ADDRESS" \
+        --listen-port "$HELPER_PORT" \
         --upstream "$UPSTREAM:53" \
+        --upstream-bind-port "$HELPER_UPSTREAM_SPORT" \
         --blocklist "$BLOCKLIST" \
         --blocklist-format "$BLOCKLIST_FORMAT" \
         --check 2>&1
@@ -447,12 +453,14 @@ helper_start() {
         die "a helper is running without the expected acknowledged generation"
     fi
 
+    mkdir -p "$RUNTIME_DIR" || die "cannot create runtime directory: $RUNTIME_DIR"
     rm -f "$STATUS_FILE"
     : > "$LOG_FILE"
     nohup "$NODE" "$BUNDLE" \
-        --listen-address "$LISTEN_ADDRESS" \
-        --listen-port 53 \
+        --listen-address "$HELPER_ADDRESS" \
+        --listen-port "$HELPER_PORT" \
         --upstream "$UPSTREAM:53" \
+        --upstream-bind-port "$HELPER_UPSTREAM_SPORT" \
         --blocklist "$BLOCKLIST" \
         --blocklist-format "$BLOCKLIST_FORMAT" \
         --status-file "$STATUS_FILE" \
@@ -471,7 +479,7 @@ helper_start() {
             [ "$(status_value generation 2>/dev/null || true)" = "$expected_generation" ] &&
             [ "$(status_value declared_rules 2>/dev/null || true)" = "$expected_declared" ] &&
             [ "$(status_value rules 2>/dev/null || true)" = "$expected_unique" ]; then
-            log "helper listening on $LISTEN_ADDRESS:53 (acknowledged generation $expected_generation)"
+            log "helper listening on $HELPER_ADDRESS:$HELPER_PORT (acknowledged generation $expected_generation)"
             return 0
         fi
         sleep 1
@@ -534,42 +542,60 @@ helper_reload() {
     die "DNS helper reload acknowledgement timed out"
 }
 
-firewall_on() {
-    if iptables -n -L "$FIREWALL_CHAIN" >/dev/null 2>&1; then
-        die "firewall chain already exists: $FIREWALL_CHAIN"
+legacy_firewall_cleanup() {
+    iptables -D INPUT -i "$INTERFACE" -p tcp --dport 53 -d "$LISTEN_ADDRESS" -j "$LEGACY_FIREWALL_CHAIN" 2>/dev/null || true
+    iptables -D INPUT -i "$INTERFACE" -p udp --dport 53 -d "$LISTEN_ADDRESS" -j "$LEGACY_FIREWALL_CHAIN" 2>/dev/null || true
+    if iptables -n -L "$LEGACY_FIREWALL_CHAIN" >/dev/null 2>&1; then
+        iptables -F "$LEGACY_FIREWALL_CHAIN" 2>/dev/null || true
+        iptables -X "$LEGACY_FIREWALL_CHAIN" 2>/dev/null || true
     fi
-    iptables -N "$FIREWALL_CHAIN" || die "cannot create firewall chain"
-    iptables -A "$FIREWALL_CHAIN" -j DROP || {
-        iptables -F "$FIREWALL_CHAIN" 2>/dev/null || true
-        iptables -X "$FIREWALL_CHAIN" 2>/dev/null || true
-        die "cannot populate firewall chain"
-    }
-    iptables -I INPUT 1 -i "$INTERFACE" -p udp --dport 53 -d "$LISTEN_ADDRESS" -j "$FIREWALL_CHAIN" || {
-        iptables -F "$FIREWALL_CHAIN" 2>/dev/null || true
-        iptables -X "$FIREWALL_CHAIN" 2>/dev/null || true
-        die "cannot install UDP DNS firewall rule"
-    }
-    iptables -I INPUT 1 -i "$INTERFACE" -p tcp --dport 53 -d "$LISTEN_ADDRESS" -j "$FIREWALL_CHAIN" || {
-        iptables -D INPUT -i "$INTERFACE" -p udp --dport 53 -d "$LISTEN_ADDRESS" -j "$FIREWALL_CHAIN" 2>/dev/null || true
-        iptables -F "$FIREWALL_CHAIN" 2>/dev/null || true
-        iptables -X "$FIREWALL_CHAIN" 2>/dev/null || true
-        die "cannot install TCP DNS firewall rule"
-    }
-    FIREWALL_STARTED=1
-    log "LAN access to $LISTEN_ADDRESS:53 blocked"
+    LEGACY_FIREWALL_STARTED=0
 }
 
-firewall_off() {
-    [ "$FIREWALL_STARTED" = "1" ] || return 0
-    if ! iptables -n -L "$FIREWALL_CHAIN" >/dev/null 2>&1; then
-        FIREWALL_STARTED=0
-        return 0
+legacy_nameservers_restore() {
+    # The old connMan-nameserver handoff pinned Nameservers to the TV's own
+    # address. If the current settings still reflect that stale pin, restore
+    # whatever was captured before the handoff ran.
+    case "$LISTEN_ADDRESS" in
+        ""|127.*|"$HELPER_ADDRESS")
+            return 0
+            ;;
+    esac
+    actual="$(connman_setting_value Nameservers | sed 's/;$//')"
+    [ "$actual" = "$LISTEN_ADDRESS" ] || return 0
+    if [ -n "$ORIGINAL_NAMESERVERS" ]; then
+        old_values="$(printf '%s' "$ORIGINAL_NAMESERVERS" | sed 's/;$//' | tr ',;' '  ')"
+        # Nameserver settings contain only IP literals.
+        # shellcheck disable=SC2086
+        connman_config --nameservers $old_values || return 1
+    else
+        connman_config --nameservers || return 1
     fi
-    iptables -D INPUT -i "$INTERFACE" -p tcp --dport 53 -d "$LISTEN_ADDRESS" -j "$FIREWALL_CHAIN" 2>/dev/null || true
-    iptables -D INPUT -i "$INTERFACE" -p udp --dport 53 -d "$LISTEN_ADDRESS" -j "$FIREWALL_CHAIN" 2>/dev/null || true
-    iptables -F "$FIREWALL_CHAIN" 2>/dev/null || true
-    iptables -X "$FIREWALL_CHAIN" 2>/dev/null || true
-    FIREWALL_STARTED=0
+    return 0
+}
+
+nat_on() {
+    nat_off || true
+
+    # The helper's upstream UDP socket is pinned to port $HELPER_UPSTREAM_SPORT,
+    # which falls outside the system ephemeral range, so its outgoing upstream
+    # queries bypass the divert and the rest of DNS is diverted to the helper.
+    iptables -t nat -A OUTPUT -p udp --dport 53 -m udp --sport "$HELPER_UPSTREAM_SPORT" -j ACCEPT || {
+        nat_off || true
+        die "cannot exempt the helper upstream UDP socket"
+    }
+    iptables -t nat -A OUTPUT -p udp --dport 53 -j DNAT --to-destination "$HELPER_ADDRESS:$HELPER_PORT" || {
+        nat_off || true
+        die "cannot install DNS divert"
+    }
+    NAT_STARTED=1
+    log "DNS divert active: outbound UDP port 53 diverted to $HELPER_ADDRESS:$HELPER_PORT; helper upstream pins source port $HELPER_UPSTREAM_SPORT"
+}
+
+nat_off() {
+    iptables -t nat -D OUTPUT -p udp --dport 53 -m udp --sport "$HELPER_UPSTREAM_SPORT" -j ACCEPT 2>/dev/null || true
+    iptables -t nat -D OUTPUT -p udp --dport 53 -j DNAT --to-destination "$HELPER_ADDRESS:$HELPER_PORT" 2>/dev/null || true
+    NAT_STARTED=0
 }
 
 capture_original_connman() {
@@ -580,24 +606,26 @@ capture_original_connman() {
     [ -n "$ORIGINAL_IPV6" ] || ORIGINAL_IPV6=auto
 }
 
-configure_connman_on() {
-    capture_original_connman
-    connman_config --nameservers "$LISTEN_ADDRESS" ||
-        die "could not set ConnMan nameserver"
+connman_setting_value() {
+    setting_key="$1"
+    grep "^${setting_key}=" "$SETTINGS" 2>/dev/null |
+        tail -n 1 | cut -d= -f2- || true
+}
 
-    grep -q "^Nameservers=${LISTEN_ADDRESS}" "$SETTINGS" ||
-        die "ConnMan nameserver setting was not persisted"
-
+configure_connman_ipv6_on() {
+    # Only the optional IPv6 policy is changed. ConnMan's DNS service is not
+    # altered here: the NAT divert handles filtering, connMan keeps its
+    # existing nameserver configuration.
     case "$IPV6_MODE" in
         off)
             connman_config --ipv6 off ||
                 die "could not set ConnMan IPv6 mode"
             grep -q "^IPv6.method=off" "$SETTINGS" ||
                 die "ConnMan IPv6 setting was not persisted"
-            log "ConnMan now uses $LISTEN_ADDRESS; IPv6 mode=off"
+            log "ConnMan IPv6 mode=off"
             ;;
         preserve)
-            log "ConnMan now uses $LISTEN_ADDRESS; IPv6 configuration preserved"
+            log "ConnMan IPv6 configuration preserved"
             ;;
         *)
             die "invalid IPv6 mode: $IPV6_MODE"
@@ -605,16 +633,7 @@ configure_connman_on() {
     esac
 }
 
-connman_setting_value() {
-    setting_key="$1"
-    grep "^${setting_key}=" "$SETTINGS" 2>/dev/null |
-        tail -n 1 | cut -d= -f2- || true
-}
-
 verify_connman_restore() {
-    expected_names="$(printf '%s' "$ORIGINAL_NAMESERVERS" | sed 's/[[:space:],;]//g')"
-    actual_names="$(connman_setting_value Nameservers | sed 's/[[:space:],;]//g')"
-    [ "$actual_names" = "$expected_names" ] || return 1
     if [ "$IPV6_MODE" = "off" ]; then
         actual_ipv6="$(connman_setting_value IPv6.method)"
         [ "$actual_ipv6" = "$ORIGINAL_IPV6" ] || return 1
@@ -624,14 +643,6 @@ verify_connman_restore() {
 
 configure_connman_off() {
     restore_ok=1
-    if [ -n "$ORIGINAL_NAMESERVERS" ]; then
-        old_values="$(printf '%s' "$ORIGINAL_NAMESERVERS" | tr ',;' '  ')"
-        # Nameserver settings contain only IP literals.
-        # shellcheck disable=SC2086
-        connman_config --nameservers $old_values || restore_ok=0
-    else
-        connman_config --nameservers || restore_ok=0
-    fi
     [ -n "$ORIGINAL_IPV6" ] || ORIGINAL_IPV6=auto
     if [ "$IPV6_MODE" = "off" ]; then
         connman_config --ipv6 "$ORIGINAL_IPV6" || restore_ok=0
@@ -639,7 +650,7 @@ configure_connman_off() {
         log "ConnMan IPv6 configuration was preserved"
     fi
     if [ "$restore_ok" -ne 1 ]; then
-        log "ConnMan resolver rollback was incomplete; retaining handoff state"
+        log "ConnMan IPv6 rollback was incomplete; retaining handoff state"
         return 1
     fi
     verify_attempt=0
@@ -649,18 +660,19 @@ configure_connman_off() {
         sleep 1
     done
     if ! verify_connman_restore; then
-        log "ConnMan resolver settings did not reach their original values; retaining handoff state"
+        log "ConnMan IPv6 setting did not reach its original value; retaining handoff state"
         return 1
     fi
-    log "ConnMan resolver configuration restored"
+    log "ConnMan IPv6 configuration restored"
 }
 
 enable_failed() {
     rc=$?
     trap - EXIT
     if [ -f "$STATE_FILE" ] && load_state; then
-        if configure_connman_off >/dev/null 2>&1; then
-            firewall_off || true
+        nat_off || true
+        legacy_firewall_cleanup || true
+        if configure_connman_off >/dev/null 2>&1 && legacy_nameservers_restore; then
             helper_stop || true
             clear_state
         else
@@ -688,13 +700,9 @@ enable_handoff() {
     fi
     capture_original_connman
     save_state
-    firewall_on
-    save_state
     helper_start
-    if ! configure_connman_on; then
-        disable_handoff
-        die "handoff setup failed"
-    fi
+    configure_connman_ipv6_on
+    nat_on
     save_state
     trap - EXIT
     log "handoff enabled"
@@ -704,15 +712,22 @@ disable_handoff() {
     require_root
     if [ ! -f "$STATE_FILE" ]; then
         helper_stop
+        nat_off
+        legacy_firewall_cleanup
         log "handoff already disabled"
         return 0
     fi
     load_state || die "invalid handoff state: $STATE_FILE"
+    if ! legacy_nameservers_restore; then
+        log "handoff remains enabled because legacy nameserver rollback failed"
+        return 1
+    fi
     if ! configure_connman_off; then
         log "handoff remains enabled because ConnMan rollback was incomplete"
         return 1
     fi
-    firewall_off
+    legacy_firewall_cleanup
+    nat_off
     helper_stop
     clear_state
     log "handoff disabled"
@@ -726,8 +741,10 @@ status_handoff() {
         else
             echo "enabled=no"
         fi
+        echo "mode=redirect"
         echo "service=$SERVICE"
-        echo "listener=$LISTEN_ADDRESS:53"
+        echo "listener=$HELPER_ADDRESS:$HELPER_PORT"
+        echo "upstream=$UPSTREAM:53"
         echo "interface=$INTERFACE"
         echo "helper=$(helper_running && echo running || echo stopped)"
         echo "connman_nameservers=$(grep '^Nameservers=' "$SETTINGS" 2>/dev/null | tail -n 1 | cut -d= -f2- || true)"
@@ -744,8 +761,9 @@ status_handoff() {
 
 plan_handoff() {
     discover_service_snapshot || die "could not obtain one coherent active ConnMan snapshot: $SNAPSHOT_ERROR"
+    echo "mode=redirect"
     echo "service=$SERVICE"
-    echo "listener=$LISTEN_ADDRESS:53"
+    echo "listener=$HELPER_ADDRESS:$HELPER_PORT"
     echo "upstream=$UPSTREAM:53"
     echo "interface=$INTERFACE"
     echo "ipv6_mode=$IPV6_MODE"

@@ -92,27 +92,26 @@ Blank lines and `#` comments are ignored. Plain names match exactly;
 parser extracts the app-generated sink entries instead. Do not include QuickSet
 unless that protection is intentionally enabled.
 
-## TV handoff prototype
+## TV handoff
 
-`scripts/tv-handoff.sh` is a controlled, reversible prototype for the TV
+`scripts/tv-handoff.sh` is a controlled, reversible handoff for the TV
 integration. The app build copies it and the generated bundle into the IPK;
-the `dns.filter` app setting controls it. On the tested webOS 9 TV,
-ConnMan's resolver sockets bind their upstream sockets to `wlan0`, so using
-`127.0.0.2` as ConnMan's upstream does not work reliably. The tested handoff
-instead:
+the `dns.filter` app setting controls it. It uses an nftables/iptables-style
+port-53 divert at the host level rather than ConnMan nameserver overrides:
 
-- keeps ConnMan listening on `127.0.0.1:53`;
-- runs the filter on the TV's current IPv4 address;
-- changes the active ConnMan service's configured IPv4 nameserver to that
-  address;
+- keeps ConnMan listening on `127.0.0.1:53` unchanged;
 - optionally disables the service's IPv6 configuration when the app's separate
   `dns.disable_ipv6` companion switch is on;
-- installs a temporary IPv4 firewall chain to prevent LAN clients from using
-  the TV's DNS listener;
-- restores the previous nameserver and, only if it changed it, IPv6 setting;
-  removes the firewall chain on disable. If ConnMan does not report the
-  original values back, the handoff keeps its state/helper for a later retry
-  instead of claiming a successful rollback.
+- runs the filter on `127.0.0.1:5353`;
+- NATs outbound UDP port-53 queries to that helper, so ConnMan's resolver
+  traffic and every other local DNS attempt is filtered;
+- the helper's single outstanding upstream UDP socket is exempted from the
+  divert by binding it to the unprivileged, non-ephemeral source port 15354.
+  (TCP DNS is intentionally not diverted, on webOS 6 the apps almost always use
+  UDP DNS through ConnMan);
+- restores ConnMan's IPv6 setting and removes the NAT rules on disable. If
+  ConnMan does not report the original value back, the handoff keeps its
+  state/helper for a later retry instead of claiming a successful rollback.
 
 The script obtains the active ConnMan service, its interface/address, and its
 active resolvers from one D-Bus snapshot at runtime. It rejects multiple
@@ -143,8 +142,8 @@ IPv6 DHCP nameserver and IPv6 DNS can bypass the IPv4 helper.
 The Node helper does not replace ConnMan and is not a firewall by itself. It
 cannot block DNS-over-TLS, DNS-over-HTTPS, direct-IP connections, or a process
 that uses a custom encrypted resolver. If the helper exits unexpectedly while
-enabled, ConnMan remains pointed at the local listener until the handoff is
-re-applied or rolled back; this fails closed but can cause a DNS outage. The
-handoff script's temporary firewall chain only protects the TV listener from
-LAN clients in the tested IPv4 path. The existing hosts mount and executable
-stubs remain useful defense-in-depth layers.
+enabled, locally generated port-53 queries remain bound to the redirect rules
+until the NAT rules are rolled back; this fails closed but can cause a DNS
+outage. The NAT divert only covers outbound IPv4 UDP port 53; TCP DNS and IPv6
+traffic are not caught by it. The existing hosts mount and executable stubs
+remain useful defense-in-depth layers.

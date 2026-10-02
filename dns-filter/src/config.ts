@@ -15,6 +15,7 @@ export interface FilterConfig {
   statusFile?: string;
   timeoutMs: number;
   logBlocked: boolean;
+  upstreamBindPort?: number;
 }
 
 export interface ParsedArgs {
@@ -123,6 +124,7 @@ export function parseArgs(args: string[]): ParsedArgs {
   let logBlocked = false;
   let help = false;
   let check = false;
+  let upstreamBindPort: number | undefined;
 
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
@@ -184,6 +186,9 @@ export function parseArgs(args: string[]): ParsedArgs {
       case '--timeout':
         timeoutMs = parseTimeout(value);
         break;
+      case '--upstream-bind-port':
+        upstreamBindPort = parsePort(value, option, false);
+        break;
       default:
         throw new ConfigError('unknown option: ' + option);
     }
@@ -215,6 +220,7 @@ export function parseArgs(args: string[]): ParsedArgs {
       statusFile,
       timeoutMs,
       logBlocked,
+      upstreamBindPort,
     },
   };
 }
@@ -234,6 +240,7 @@ export function usage(): string {
     '  --status-file PATH       Publish acknowledged reload status atomically',
     '  --timeout MS             Upstream timeout (default: 5000)',
     '  --log-blocked            Log blocked domain names',
+    '  --upstream-bind-port N   Pin the UDP upstream socket source port',
     '  --check                  Validate configuration and blocklist, then exit',
     '  -h, --help               Show this help',
   ].join('\n');

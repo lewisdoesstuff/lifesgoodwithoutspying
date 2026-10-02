@@ -178,6 +178,9 @@ export class DnsFilterProxy {
     try {
       this.udp = dgram.createSocket(listenType);
       this.upstreamUdp = dgram.createSocket(upstreamType);
+      if (this.config.upstreamBindPort !== undefined && this.config.upstreamBindPort > 0) {
+        this.upstreamUdp.bind(this.config.upstreamBindPort, '0.0.0.0');
+      }
     } catch (error) {
       finishStart(asError(error));
       return;

@@ -112,8 +112,7 @@ export function main(args: string[]): void {
   });
 }
 
-function publishStatus(
-  path: string | undefined,
+function publishStatus(  path: string | undefined,
   blocklist: Blocklist,
   ready: boolean,
   reloadOk: number,
