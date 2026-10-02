@@ -97,12 +97,12 @@ unless that protection is intentionally enabled.
 `scripts/tv-handoff.sh` is a controlled, reversible handoff for the TV
 integration. The app build copies it and the generated bundle into the IPK;
 the `dns.filter` app setting controls it. It uses an nftables/iptables-style
-port-53 divert at the host level rather than ConnMan nameserver overrides:
+port-53 divert at the host level:
 
 - keeps ConnMan listening on `127.0.0.1:53` unchanged;
 - optionally disables the service's IPv6 configuration when the app's separate
   `dns.disable_ipv6` companion switch is on;
-- runs the filter on `127.0.0.1:5353`;
+- runs the filter on `127.0.0.1:5354`;
 - NATs outbound UDP and TCP port-53 queries to that helper, so ConnMan's
   resolver traffic and every other local DNS attempt is filtered;
 - the helper's own upstream sockets are exempted from the divert: its UDP

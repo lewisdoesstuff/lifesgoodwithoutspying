@@ -4,12 +4,11 @@
 # All outbound UDP and TCP traffic destined for port 53 is diverted by the
 # nat OUTPUT chain into a local filtering helper. This includes the DNS
 # queries ConnMan's DNS proxy makes on behalf of every app. ConnMan's DNS
-# settings are intentionally left alone: webOS 6's connmand does not
-# reliably route queries through a locally configured nameserver, which
-# made the previous handoff silently bypass the filter or break all DNS.
+# settings are not modified by this handoff.
 #
-# The helper's own upstream queries are exempt from the redirect by
-# matching its owner uid in the OUTPUT chain.
+# The helper's own upstream queries are exempt from the redirect by source
+# port: its UDP upstream socket is pinned to a fixed source port, and its TCP
+# upstream connections rotate through a dedicated range.
 #
 # This script is intentionally separate from the normal webOS JS service. It
 # is called by the opt-in init hook only after the user enables the feature.
@@ -629,9 +628,6 @@ connman_setting_value() {
 }
 
 configure_connman_ipv6_on() {
-    # Only the optional IPv6 policy is changed. ConnMan's DNS service is not
-    # altered here: the NAT divert handles filtering, connMan keeps its
-    # existing nameserver configuration.
     case "$IPV6_MODE" in
         off)
             connman_config --ipv6 off ||
