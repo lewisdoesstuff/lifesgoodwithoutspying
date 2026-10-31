@@ -442,11 +442,9 @@ helper_pid() {
         ''|*[!0-9]*) return 1 ;;
     esac
     kill -0 "$pid" 2>/dev/null || return 1
-    command_line="$(tr '\000' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)"
-    case "$command_line" in
-        *nospy-dns-filter*) ;;
-        *) return 1 ;;
-    esac
+    expected_node="$(command -v "$NODE")" || return 1
+    [ "$(readlink "/proc/$pid/exe" 2>/dev/null)" = "$(realpath "$expected_node")" ] || return 1
+    tr '\000' '\n' < "/proc/$pid/cmdline" 2>/dev/null | grep -qxF "$BUNDLE" || return 1
     echo "$pid"
 }
 
@@ -565,15 +563,24 @@ helper_start() {
 }
 
 helper_stop() {
-    pid="$(helper_pid 2>/dev/null || true)"
-    if [ -n "$pid" ]; then
-        kill "$pid" 2>/dev/null || true
+    stop_pid="$(helper_pid 2>/dev/null || true)"
+    if [ -n "$stop_pid" ]; then
+        # Revalidate the exact executable and command line before each signal;
+        # a process can exit and its numeric PID can be reused while we wait.
+        [ "$(helper_pid 2>/dev/null || true)" != "$stop_pid" ] || kill "$stop_pid" 2>/dev/null || true
         elapsed=0
-        while kill -0 "$pid" 2>/dev/null && [ "$elapsed" -lt 3 ]; do
+        while [ "$(helper_pid 2>/dev/null || true)" = "$stop_pid" ] && [ "$elapsed" -lt 3 ]; do
             sleep 1
             elapsed=$((elapsed + 1))
         done
-        kill -KILL "$pid" 2>/dev/null || true
+        if [ "$(helper_pid 2>/dev/null || true)" = "$stop_pid" ]; then
+            kill -KILL "$stop_pid" 2>/dev/null || true
+            sleep 1
+            if [ "$(helper_pid 2>/dev/null || true)" = "$stop_pid" ]; then
+                log "DNS helper still running; retaining its recovery records"
+                return 1
+            fi
+        fi
     fi
     rm -f "$PID_FILE" "$STATUS_FILE"
 }
@@ -836,8 +843,7 @@ enable_failed() {
         nat_off || true
         legacy_firewall_cleanup || true
         if configure_connman_off >/dev/null 2>&1 && legacy_nameservers_restore; then
-            helper_stop || true
-            clear_state
+            if helper_stop; then clear_state; else log "helper stop incomplete; retaining handoff state"; fi
         else
             log "rollback incomplete; retaining handoff state for a later retry"
         fi
@@ -886,7 +892,7 @@ enable_handoff() {
 disable_handoff() {
     require_root
     if [ ! -f "$STATE_FILE" ]; then
-        helper_stop
+        helper_stop || return 1
         resolv_off
         nat_off
         legacy_firewall_cleanup
@@ -905,7 +911,7 @@ disable_handoff() {
     legacy_firewall_cleanup
     resolv_off
     nat_off
-    helper_stop
+    helper_stop || { log "DNS helper stop incomplete; state retained"; return 1; }
     clear_state
     log "handoff disabled"
 }

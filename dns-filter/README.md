@@ -181,3 +181,7 @@ until the NAT rules are rolled back; this fails closed but can cause a DNS
 outage. The NAT divert only covers outbound IPv4 UDP/TCP port 53; IPv6 traffic
 is not caught by it. The existing hosts mount and executable stubs remain
 useful defense-in-depth layers.
+The stop path verifies that the recorded PID still runs the configured Node
+executable and exact helper bundle before signaling it. If the verified helper
+does not stop, its state is retained for a later retry. Process inspection and
+signaling remain separate operations, so there is still a small race.
