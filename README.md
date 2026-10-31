@@ -31,8 +31,11 @@ TVs: ad delivery, Automatic Content Recognition, and always-on voice capture.
   blocked from boot.
 - Stops the on-TV ad, ACR and telemetry daemons (`admanager`, `livepick`,
   `acr2`, `nudge`, `rdxd`, `uploadd`, `sportsalarm`).
-- Stops the LG voice and NLP services (`voiceinput`, `voiceconductor`,
-  `nlpmanager`, `performer`) and the voice app.
+- Targets listed LG voice and NLP services (`voiceinput`, `voiceconductor`,
+  `nlpmanager`, `performer`) and the voice app. This does not disable
+  microphone hardware or guarantee that other software cannot access audio;
+  target availability and results vary by model and firmware. The remote voice
+  key may stop working.
 - Bind-mounts an inert stub over each target binary, so the Luna hub cannot
   respawn it (no polling loop).
 - With the ThinQ / companion toggle on, also stops the assistant and IoT
