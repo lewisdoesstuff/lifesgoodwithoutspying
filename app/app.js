@@ -228,7 +228,9 @@
             btn.classList.toggle('on', on);
             btn.classList.toggle('pend', usable && !!model.dirty[key]);
             btn.setAttribute('aria-checked', on ? 'true' : 'false');
-            btn.disabled = busy || !usable;
+            btn.disabled = busy || !usable || (key === 'purge.boot' && !on);
+            if (key === 'purge.boot')
+                setText(btn.querySelector('small'), on ? 'item.purge.boot.savedOn' : 'item.purge.boot.detail');
         });
         setText(byId('sdp-detail'), usable && model.saved['clock.ntp'] ? 'item.domains.sdp.detailNtp' : 'item.domains.sdp.detail');
         var groups = {};
@@ -281,7 +283,7 @@
         var version = byId('app-version');
         version.textContent = 'LGWS ' + appVersion;
         version.hidden = !appVersion;
-        byId('btn-purge').disabled = busy || root !== true;
+        byId('btn-purge').disabled = true;
         byId('btn-selftest').disabled = busy || root !== true;
         byId('btn-language').disabled = busy;
     }

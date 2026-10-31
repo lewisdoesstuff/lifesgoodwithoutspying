@@ -38,6 +38,9 @@ jobs:
       - name: Build IPK
         run: ./build.sh
 
+      - name: Purge UI regression
+        run: node tests/purge-ui.js
+
       - name: DNS unit tests
         run: cd dns-filter && bun test
 

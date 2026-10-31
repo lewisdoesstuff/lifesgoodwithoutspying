@@ -32,7 +32,7 @@ conf_default() {
         voice.stop)         echo on ;;
         ads.stop)           echo on ;;
         lan.block)          echo off ;;
-        purge.boot)         echo on ;;
+        purge.boot)         echo off ;;
         *)                  echo off ;;
     esac
 }
@@ -559,27 +559,10 @@ proc_states() {
     rm -f "$tmp.targets" "$tmp.exists" "$tmp.procs"
 }
 
-# Delete locally buffered ACR / speech-to-text files. Our own scratch files are
-# excluded by name: they live in /tmp and match "voice", so without this a
-# concurrent apply would delete the list a running status call is reading.
+# Do not remove files without a firmware-specific, verified cache allowlist.
 purge_residue() {
-    total=0
-    for base in /var/log /tmp /var/run; do
-        [ -d "$base" ] || continue
-        n="$(find "$base" -maxdepth 3 -type f ! -name 'lifesgoodwithoutspying*' \
-            \( -iname '*acr*' -o -iname '*voice*' -o -iname '*alphonso*' -o -iname '*stt*' \) \
-            2>/dev/null | wc -l)"
-        [ "$n" -gt 0 ] || continue
-        find "$base" -maxdepth 3 -type f ! -name 'lifesgoodwithoutspying*' \
-            \( -iname '*acr*' -o -iname '*voice*' -o -iname '*alphonso*' -o -iname '*stt*' \) \
-            -exec rm -f {} + 2>/dev/null
-        total=$((total + n))
-    done
-    if [ "$total" -gt 0 ]; then
-        echo "[+] purged $total ACR/voice residue file(s)"
-    else
-        echo "[~] no ACR/voice residue found"
-    fi
+    echo "[-] Purge unavailable: no verified cache-path allowlist for this firmware"
+    return 1
 }
 
 # Set the clock to a Unix time in seconds. Ask the system service first, so

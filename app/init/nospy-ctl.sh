@@ -228,6 +228,10 @@ case "$1" in
             on|off) ;;
             *) echo "value must be on or off" >&2; exit 2 ;;
         esac
+        if [ "$key" = purge.boot ] && [ "$val" = on ]; then
+            echo "Purge unavailable: no verified cache-path allowlist for this firmware" >&2
+            exit 1
+        fi
         # Only save the setting. A full apply takes 10-20 seconds, so the UI
         # collects changes and applies them once ("Update protection"); run
         # apply yourself after setting keys over SSH.

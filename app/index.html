@@ -175,9 +175,9 @@
             <span class="sw" aria-hidden="true"></span>
             <span class="text"><b data-i18n="item.clock.ntp.title">Set clock from NTP</b><small data-i18n="item.clock.ntp.detail">Lets LG's service platform be blocked from boot</small></span>
           </button>
-          <button class="item" data-key="purge.boot" role="switch" aria-checked="false">
+          <button class="item" data-key="purge.boot" role="switch" aria-checked="false" disabled>
             <span class="sw" aria-hidden="true"></span>
-            <span class="text"><b data-i18n="item.purge.boot.title">Delete ACR and voice data at boot</b></span>
+            <span class="text"><b data-i18n="item.purge.boot.title">Purge on boot</b><small data-i18n="item.purge.boot.detail">Unavailable until cache paths are verified for this firmware</small></span>
           </button>
         </div>
       </section>
@@ -190,7 +190,7 @@
     </div>
 
     <footer class="tools">
-      <button id="btn-purge" data-i18n="button.purge">Purge now</button>
+      <button id="btn-purge" data-i18n="button.purge" disabled>Purge unavailable</button>
       <button id="btn-selftest" data-i18n="button.selftest">Self-test</button>
       <span class="device">
         <i class="dot" id="root-dot"></i><span id="root-text" data-i18n="footer.checking">Checking</span>
