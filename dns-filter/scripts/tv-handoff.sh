@@ -4,7 +4,8 @@
 # All outbound UDP and TCP traffic destined for port 53 is diverted by the
 # nat OUTPUT chain into a local filtering helper. This includes the DNS
 # queries ConnMan's DNS proxy makes on behalf of every app. ConnMan's DNS
-# settings are not modified by this handoff.
+# settings are not modified by this handoff. In IPv6-off mode, queries sent
+# straight to the upstream resolver are exempt (see nat_on).
 #
 # The helper's own upstream queries are exempt from the redirect by source
 # port: its UDP upstream socket is pinned to a fixed source port, and its TCP
@@ -660,6 +661,21 @@ nat_on() {
         nat_off || true
         die "cannot exempt the helper upstream TCP sockets"
     }
+    # ConnMan's online check uses interface-bound sockets, which never receive
+    # the helper's reply over loopback, so it fails and the TV reports no
+    # internet. There is no owner match to single ConnMan out, so exempt the
+    # upstream resolver instead. Only safe with resolv.conf replaced (IPv6-off
+    # mode); otherwise ConnMan's proxy forwards app queries there.
+    if [ "$IPV6_MODE" = "off" ]; then
+        iptables -t nat -A OUTPUT -p udp --dport 53 -d "$UPSTREAM" -j ACCEPT || {
+            nat_off || true
+            die "cannot exempt ConnMan's upstream UDP queries"
+        }
+        iptables -t nat -A OUTPUT -p tcp --dport 53 -d "$UPSTREAM" -j ACCEPT || {
+            nat_off || true
+            die "cannot exempt ConnMan's upstream TCP queries"
+        }
+    fi
     iptables -t nat -A OUTPUT -p udp --dport 53 -j DNAT --to-destination "$HELPER_ADDRESS:$HELPER_PORT" || {
         nat_off || true
         die "cannot install DNS divert"
@@ -672,7 +688,20 @@ nat_on() {
     log "DNS divert active: outbound UDP/TCP port 53 diverted to $HELPER_ADDRESS:$HELPER_PORT; helper upstream pins UDP source port $HELPER_UPSTREAM_SPORT and rotates TCP source ports $HELPER_UPSTREAM_TCP_PORT_START:$HELPER_UPSTREAM_TCP_PORT_END"
 }
 
+# Finds the upstream exemption by shape (a destination-only ACCEPT for port 53)
+# so it can be removed even when the saved state, and the address, is gone.
+nat_upstream_off() {
+    iptables -t nat -S OUTPUT 2>/dev/null |
+        awk '$1 == "-A" && $3 == "-d" && $4 ~ /\/32$/ && $NF == "ACCEPT" && /--dport 53/ && !/--sport/ {
+            sub(/\/32$/, "", $4); print $4, $6
+        }' |
+        while read -r address protocol; do
+            iptables -t nat -D OUTPUT -p "$protocol" --dport 53 -d "$address" -j ACCEPT 2>/dev/null || true
+        done
+}
+
 nat_off() {
+    nat_upstream_off
     iptables -t nat -D OUTPUT -p udp --dport 53 -m udp --sport "$HELPER_UPSTREAM_SPORT" -j ACCEPT 2>/dev/null || true
     iptables -t nat -D OUTPUT -p tcp --dport 53 -m tcp --sport "$HELPER_UPSTREAM_TCP_PORT_START:$HELPER_UPSTREAM_TCP_PORT_END" -j ACCEPT 2>/dev/null || true
     iptables -t nat -D OUTPUT -p udp --dport 53 -j DNAT --to-destination "$HELPER_ADDRESS:$HELPER_PORT" 2>/dev/null || true

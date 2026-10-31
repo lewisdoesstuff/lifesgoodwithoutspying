@@ -125,6 +125,13 @@ port-53 divert at the host level:
 - the helper's own upstream sockets are exempted from the divert: its UDP
   upstream source port is pinned to 15354 and its TCP upstream source ports
   rotate across 15355:15483;
+- in that same IPv6-off mode, port-53 traffic addressed straight to the
+  upstream resolver is exempted, because ConnMan's online check uses
+  interface-bound sockets that cannot accept the helper's reply over loopback.
+  Apps still reach the helper through the replaced `resolv.conf`, except any
+  that query the upstream address directly, which bypass the filter. In the
+  other mode ConnMan's proxy forwards app queries to the upstream, so nothing
+  is exempted there;
 - restores ConnMan's IPv6 setting and `resolv.conf` and removes the NAT rules
   on disable. If
   ConnMan does not report the original value back, the handoff keeps its
