@@ -771,8 +771,19 @@ configure_connman_ipv6_on() {
         off)
             connman_config --ipv6 off ||
                 die "could not set ConnMan IPv6 mode"
-            grep -q "^IPv6.method=off" "$SETTINGS" ||
-                die "ConnMan IPv6 setting was not persisted"
+            # At boot ConnMan can take several seconds to write the setting.
+            persist_attempt=0
+            while [ "$persist_attempt" -lt 10 ]; do
+                grep -q "^IPv6.method=off" "$SETTINGS" && break
+                persist_attempt=$((persist_attempt + 1))
+                sleep 1
+            done
+            if ! grep -q "^IPv6.method=off" "$SETTINGS"; then
+                # 75 (EX_TEMPFAIL), as for a missing network: the exit trap
+                # rolls back, so the caller can retry later.
+                echo "dns-filter: ConnMan IPv6 setting was not persisted" >&2
+                exit 75
+            fi
             log "ConnMan IPv6 mode=off"
             ;;
         preserve)
