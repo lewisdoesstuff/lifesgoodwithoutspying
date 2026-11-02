@@ -58,9 +58,8 @@ TVs: ad delivery, Automatic Content Recognition, and always-on voice capture.
 
 ### webOS 4.x
 
-- The optional DNS filter doesn't work on 4.x yet: it needs `busctl`, which
-  4.x lacks. Switching it on reports "missing command: busctl" and the other
-  protections still apply.
+- 4.x has no `busctl`, so the DNS filter reads ConnMan's settings with
+  `dbus-send` instead.
 - Protection may be off after a reboot. Some 4.x firmware never runs the
   Homebrew Channel startup hook
   ([webos-homebrew-channel#124](https://github.com/webosbrew/webos-homebrew-channel/issues/124)).

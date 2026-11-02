@@ -249,10 +249,48 @@ active_service_ids() {
         awk 'substr($0, 3, 1) ~ /[OR]/ { print $NF }'
 }
 
+# webOS 4.x ships dbus-send but not busctl; use busctl wherever it exists.
+use_busctl() {
+    command -v busctl >/dev/null 2>&1
+}
+
 connman_unique_name() {
     configure_connman_bus
-    busctl --system list 2>/dev/null |
-        awk '$1 ~ /^:[0-9]/ && $0 ~ /[[:space:]]connman\.service[[:space:]]/ { print $1 }'
+    if use_busctl; then
+        busctl --system list 2>/dev/null |
+            awk '$1 ~ /^:[0-9]/ && $0 ~ /[[:space:]]connman\.service[[:space:]]/ { print $1 }'
+        return
+    fi
+    dbus-send --system --print-reply --dest=org.freedesktop.DBus / \
+        org.freedesktop.DBus.GetNameOwner string:net.connman 2>/dev/null |
+        awk '$1 == "string" { gsub(/"/, "", $2); print $2 }'
+}
+
+connman_service_properties() {
+    if use_busctl; then
+        busctl --system call "$1" \
+            "/net/connman/service/$SERVICE" net.connman.Service GetProperties
+    else
+        dbus-send --system --print-reply --dest="$1" \
+            "/net/connman/service/$SERVICE" net.connman.Service.GetProperties
+    fi
+}
+
+# busctl prints the properties on one line; dbus-send prints a tree.
+service_property() {
+    if use_busctl; then
+        connman_property "$@"
+    else
+        dbus_send_property "$1" "$2"
+    fi
+}
+
+service_nameservers() {
+    if use_busctl; then
+        connman_nameservers
+    else
+        dbus_send_nameservers
+    fi
 }
 
 connman_property() {
@@ -308,6 +346,56 @@ connman_nameservers() {
     '
 }
 
+# dbus-send --print-reply opens each key with a "dict entry(" line, puts the
+# key on the next line and its value on the "variant" line after that.
+# Top-level keys sit at depth 1 and section keys (IPv4, Ethernet) at depth 2.
+# Matching on depth and section keeps the IPv4 Address apart from the MAC
+# addresses stored under the same key name.
+dbus_send_property() {
+    awk -v section="$1" -v key="$2" '
+        function quoted(line) {
+            if (match(line, /"[^"]*"/))
+                return substr(line, RSTART + 1, RLENGTH - 2)
+            return ""
+        }
+        /^[[:space:]]*dict entry\($/ { depth++; want_key = 1; next }
+        /^[[:space:]]*\)$/ { depth--; next }
+        want_key && $1 == "string" {
+            want_key = 0
+            current = quoted($0)
+            if (depth == 1)
+                top = current
+            next
+        }
+        $1 == "variant" && $2 == "string" && current == key {
+            if ((section == "" && depth == 1) || (depth == 2 && top == section)) {
+                print quoted($0)
+                exit
+            }
+        }
+    '
+}
+
+dbus_send_nameservers() {
+    awk '
+        function quoted(line) {
+            if (match(line, /"[^"]*"/))
+                return substr(line, RSTART + 1, RLENGTH - 2)
+            return ""
+        }
+        /^[[:space:]]*dict entry\($/ { depth++; want_key = 1; next }
+        /^[[:space:]]*\)$/ { depth--; next }
+        want_key && $1 == "string" {
+            want_key = 0
+            current = quoted($0)
+            next
+        }
+        depth == 1 && current == "Nameservers" && $1 == "variant" { listing = 1; next }
+        listing && $1 == "string" { print quoted($0); next }
+        listing && $1 == "]" { exit }
+    '
+}
+
 is_ipv4_literal() {
     printf '%s\n' "$1" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'
 }
@@ -352,13 +440,12 @@ discover_service_snapshot() {
         return 1
     fi
     unique_name="$(printf '%s\n' "$unique_names" | awk 'NF { print; exit }')"
-    props="$(busctl --system call "$unique_name" \
-        "/net/connman/service/$SERVICE" net.connman.Service GetProperties 2>/dev/null)" || {
+    props="$(connman_service_properties "$unique_name" 2>/dev/null)" || {
         snapshot_fail "could not read ConnMan service properties" 1
         return 1
     }
 
-    state="$(printf '%s\n' "$props" | connman_property '' State '')"
+    state="$(printf '%s\n' "$props" | service_property '' State '')"
     # Ready is as usable as Online; ConnMan only stays at Ready because its
     # online check failed.
     case "$state" in
@@ -368,14 +455,14 @@ discover_service_snapshot() {
             return 1
             ;;
     esac
-    INTERFACE="$(printf '%s\n' "$props" | connman_property Ethernet Interface IPv4)"
-    LISTEN_ADDRESS="$(printf '%s\n' "$props" | connman_property IPv4 Address IPv6)"
+    INTERFACE="$(printf '%s\n' "$props" | service_property Ethernet Interface IPv4)"
+    LISTEN_ADDRESS="$(printf '%s\n' "$props" | service_property IPv4 Address IPv6)"
     [ -n "$INTERFACE" ] || {
         snapshot_fail "ConnMan service did not provide an Ethernet interface" 0
         return 1
     }
 
-    nameservers="$(printf '%s\n' "$props" | connman_nameservers)"
+    nameservers="$(printf '%s\n' "$props" | service_nameservers)"
     ipv4_nameservers=""
     ipv4_count=0
     while IFS= read -r nameserver; do
@@ -860,9 +947,10 @@ enable_handoff() {
     esac
     [ -f "$STATE_FILE" ] && die "handoff is already enabled; run disable first"
     require_command connmanctl
-    # ConnMan discovery reads service properties over busctl. webOS 4.x ships
-    # without it; fail now instead of retrying discovery for 30 seconds.
-    require_command busctl
+    # ConnMan discovery reads service properties over busctl, or dbus-send on
+    # webOS 4.x; fail now instead of retrying discovery for 30 seconds.
+    use_busctl || command -v dbus-send >/dev/null 2>&1 ||
+        die "missing command: busctl or dbus-send"
     require_command iptables
     require_command ip
     require_command script
