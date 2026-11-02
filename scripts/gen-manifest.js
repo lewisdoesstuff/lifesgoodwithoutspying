@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 // Generate the Homebrew Channel package manifest for a built IPK.
 // Field layout mirrors a real manifest (e.g. org.webosbrew.hbchannel).
-// Usage: node scripts/gen-manifest.js <ipk-path> > <id>.manifest.json
+// Usage: node scripts/gen-manifest.js <ipk-path> <release-tag> > <id>.manifest.json
 const fs = require('fs');
 const crypto = require('crypto');
 
 const REPO = 'https://github.com/lewisdoesstuff/lifesgoodwithoutspying';
 
 const ipkPath = process.argv[2];
-if (!ipkPath) {
-  console.error('usage: gen-manifest.js <ipk-path>');
+const tag = process.argv[3];
+if (!ipkPath || !tag) {
+  console.error('usage: gen-manifest.js <ipk-path> <release-tag>');
   process.exit(2);
 }
 
@@ -26,7 +27,9 @@ const manifest = {
   iconUri: REPO.replace('github.com', 'raw.githubusercontent.com') + '/main/app/largeIcon.png',
   sourceUrl: REPO,
   rootRequired: true,
-  ipkUrl: REPO + '/releases/latest/download/' + id + '.ipk',
+  // Point at this release, not latest: the Homebrew Channel can hold on to
+  // an older manifest, and its hash must still match the IPK it downloads.
+  ipkUrl: REPO + '/releases/download/' + tag + '/' + id + '.ipk',
   ipkHash: { sha256: crypto.createHash('sha256').update(bytes).digest('hex') }
 };
 

@@ -91,7 +91,7 @@ jobs:
         run: |
           IPK=$(ls dist/*.ipk)
           ID=$(node -e "console.log(JSON.parse(require('fs').readFileSync('app/appinfo.json')).id)")
-          node scripts/gen-manifest.js "$IPK" > "dist/${ID}.manifest.json"
+          node scripts/gen-manifest.js "$IPK" "${{ github.ref_name }}" > "dist/${ID}.manifest.json"
           cp "$IPK" "dist/${ID}.ipk"
           cat "dist/${ID}.manifest.json"
 
