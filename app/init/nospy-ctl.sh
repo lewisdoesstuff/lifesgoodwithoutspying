@@ -83,6 +83,17 @@ selftest_processes() {
         }'
 }
 
+# One selftest line per service that has a stand-in.
+selftest_answering() {
+    for service in $ANSWERED_SERVICES; do
+        if answer_running "$service"; then
+            echo "  ${service##*.} stand-in: answering"
+        else
+            echo "  ${service##*.} stand-in: stopped"
+        fi
+    done
+}
+
 # Background jobs.
 #
 # enable, disable and apply used to run the whole apply inside the Homebrew
@@ -362,9 +373,11 @@ case "$1" in
         echo
         echo "== listed processes (effective protection check) =="
         proc_states "$TMP.proc" | selftest_processes
+        selftest_answering
         echo
         echo "== ACR / ad services on the Luna bus =="
         ls-monitor -l 2>/dev/null | grep -iE 'service\.acr|service\.livepick|colorInfoMiner|service\.admanager|service\.adoverlay|service\.tvdataexchang|acr2|nudge|rdxd|uploadd|sportsalarm' | grep -vi 'wowplay' || echo "  (none)"
+        echo "  NOTE: a listed admanager is our stand-in if the check above says it is answering."
         echo
         echo "== buffered ACR / voice residue files =="
         find /var/log /tmp /var/run -maxdepth 3 -type f \

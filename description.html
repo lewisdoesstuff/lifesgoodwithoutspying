@@ -9,6 +9,7 @@
 <li>Stops the on-TV ad, ACR and telemetry daemons (admanager, livepick, acr2, nudge, rdxd, uploadd, sportsalarm).</li>
 <li>Stops the LG voice and NLP services (voiceinput, voiceconductor, nlpmanager, performer) and the voice app.</li>
 <li>Bind-mounts an inert stub over each target binary, so the Luna hub cannot respawn it (no polling loop).</li>
+<li>Answers calls to admanager, voiceconductor and voiceinput with a small stand-in, so apps and Settings don't hang waiting on them.</li>
 <li>With the ThinQ / companion toggle on, also stops the assistant and IoT daemons (trigger_thinq, trigger_alexa, iot-client, iot-proxy).</li>
 <li>Disabling protection puts the stopped services and the UPnP/SSDP daemons back, rather than leaving them down until a reboot.</li>
 <li>Optionally swaps /usr/sbin/upnpd for an inert stub, killing UPnP discovery both ways (breaks casting to the TV too).</li>
