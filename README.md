@@ -15,9 +15,6 @@ TVs: ad delivery, Automatic Content Recognition, and always-on voice capture.
 > Supported on **webOS 4 and newer**. Only *tested* on **webOS 23 (9)** and **webOS 4.4** so far —
 > webOS 5+ reported working okay
 
-> [!WARNING]
-> Enabling the 'Voice Services' toggle may cause a ~10s delay opening the settings menu on some webOS versions.  
-
 ## Features
 
 - Blackholes LG ad / ACR / telemetry domains to loopback by bind-mounting a
@@ -38,6 +35,9 @@ TVs: ad delivery, Automatic Content Recognition, and always-on voice capture.
   key may stop working.
 - Bind-mounts an inert stub over each target binary, so the Luna hub cannot
   respawn it (no polling loop).
+- Answers calls to `admanager`, `voiceconductor` and `voiceinput` with a small
+  stand-in, so apps and Settings don't hang waiting on them. It returns an
+  all-zero ad ID and no voice languages; the real executables stay stubbed.
 - With the ThinQ / companion toggle on, also stops the assistant and IoT
   daemons (`trigger_thinq`, `trigger_alexa`, `iot-client`, `iot-proxy`).
 - Disabling protection puts the stopped services and the UPnP/SSDP daemons
@@ -163,6 +163,11 @@ is stopped and reported as failed, so the app never waits forever. Over SSH,
   Telemetry and Home dashboard categories, where they stopped the store opening
   (error 202 or -102). With them in their own category, which defaults off,
   the other categories no longer break the store. The store also needs SDP.
+- **Service stand-ins.** The hub still lists a stubbed service, so a call to it
+  gets no reply and Settings or apps can hang. `nospy-luna-stub.js` registers
+  three of those service names and answers the calls they need, without reading
+  any ID or touching audio; the self-test reports whether each one is running.
+  It needs `node` on the TV.
 - **The domain sink is host-based.** The self-test's `getent` and `curl`
   checks only prove that the generated `/etc/hosts` is visible to commands
   using the local resolver. Some webOS services use their own DNS path,

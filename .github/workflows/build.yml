@@ -28,7 +28,7 @@ jobs:
 
       - name: Syntax checks
         run: |
-          for f in app/*.js; do node --check "$f"; done
+          for f in app/*.js app/init/nospy-luna-stub.js; do node --check "$f"; done
           for f in app/init/*.sh; do sh -n "$f"; done
           sh -n dns-filter/scripts/tv-handoff.sh
 
@@ -41,9 +41,9 @@ jobs:
       - name: DNS unit tests
         run: cd dns-filter && bun test
 
-      # Run the DNS filter bundle under the Node releases the TVs ship:
-      # 0.12 on webOS 3.x and 8.12 on webOS 4-6.
-      - name: DNS filter smoke tests on TV Node versions
+      # Run the DNS filter bundle and the Luna stub under the Node releases the
+      # TVs ship: 0.12 on webOS 3.x and 8.12 on webOS 4-6.
+      - name: Smoke tests on TV Node versions
         run: |
           while read -r version sha256; do
             tarball="node-v${version}-linux-x64.tar.gz"
@@ -52,6 +52,7 @@ jobs:
             tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP"
             echo "Node ${version}:"
             (cd dns-filter && NOSPY_DNS_NODE="$RUNNER_TEMP/node-v${version}-linux-x64/bin/node" bun run smoke)
+            TEST_NODE="$RUNNER_TEMP/node-v${version}-linux-x64/bin/node" python3 -m unittest discover -s tests -p test_luna_stub.py
           done <<'EOF'
           0.12.18 990b3b39b6290000da1c9fdb5352c2e81fca4e6eeaecfce77c46b3cea1a68dba
           8.12.0 3df19b748ee2b6dfe3a03448ebc6186a3a86aeab557018d77a0f7f3314594ef6

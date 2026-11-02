@@ -343,11 +343,18 @@ apply_dns_filter() {
 #
 # Turning a toggle on stops the category's units, bind-mounts an inert stub
 # over each target executable, then kills whatever was already running.
-# Turning it off unwinds both, so a toggle is not a one-way door.
+# Turning it off unwinds both, so a toggle is not a one-way door. Services that
+# have a stand-in get it only while their executables are stubbed.
 apply_stub_category() {
     key="$1"
     unit_fn="$2"
     exec_fn="$3"
+
+    "$exec_fn" > "$EXECS_TMP"
+    answered="$(answered_in "$EXECS_TMP")"
+    for service in $answered; do
+        answer_stop "$service"
+    done
 
     if ! is_on "$key"; then
         stub_clear_key "$key"
@@ -372,7 +379,6 @@ apply_stub_category() {
 
     stub_write
     stub_clear_key "$key"
-    "$exec_fn" > "$EXECS_TMP"
     n=0
     while IFS= read -r path; do
         [ -n "$path" ] || continue
@@ -383,6 +389,9 @@ apply_stub_category() {
     echo "[+] $key: stubbed $n executable(s)"
 
     kill_by_paths "$EXECS_TMP"
+    for service in $answered; do
+        answer_start "$service"
+    done
 }
 
 # Ad / ACR / telemetry daemons.

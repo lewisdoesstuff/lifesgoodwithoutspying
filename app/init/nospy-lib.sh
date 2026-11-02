@@ -462,6 +462,103 @@ stub_count() {
     fi
 }
 
+# Answering stubs.
+#
+# The hub still lists a stubbed service, so a call to it gets no reply and some
+# callers hang. For these services nospy-luna-stub.js takes the name and answers
+# instead, with the real executable still stubbed. A worker restarts it if it
+# exits, and retries while the hub still holds the name for the real service.
+ANSWERED_SERVICES="com.webos.service.admanager com.webos.service.voiceconductor com.webos.service.voiceinput"
+# Token of the current worker for a service, as "<prefix>.<service>"; removing it
+# stops the worker. Companion .pid and .err files sit beside it.
+ANSWER_PREFIX="/tmp/lifesgoodwithoutspying.answer"
+# A run this long counts as working, and clears the count of failed runs.
+ANSWER_HEALTHY_SECONDS=60
+ANSWER_MAX_FAILURES=20
+ANSWER_RETRY_SECONDS=5
+
+# Exit 0 if file $2 lists the executable of service $1.
+answer_exec_listed() {
+    grep -q "/${1##*.}\$" "$2" 2>/dev/null
+}
+
+# Print the services whose executables are in file $1. A category answers for
+# whichever of its executables have a stand-in, so it needs no list of its own.
+answered_in() {
+    for a_service in $ANSWERED_SERVICES; do
+        answer_exec_listed "$a_service" "$1" && echo "$a_service"
+    done
+    return 0
+}
+
+# Exit 0 if the stub for service $1 is running, leaving its pid in a_pid. A pid
+# file can outlive its process, and the pid can then name something else.
+answer_running() {
+    [ -f "$ANSWER_PREFIX.$1.pid" ] && read -r a_pid < "$ANSWER_PREFIX.$1.pid" || return 1
+    case " $(tr '\000' ' ' 2>/dev/null < "/proc/$a_pid/cmdline") " in
+        *"/nospy-luna-stub.js $1 "*) return 0 ;;
+    esac
+    return 1
+}
+
+# Start answering for one service, once its real executable is stubbed.
+answer_start() {
+    a_service="$1"
+    a_name="${a_service##*.}"
+    a_file="$ANSWER_PREFIX.$a_service"
+    # Never take the name of a service whose real executable can still run.
+    if ! answer_exec_listed "$a_service" "$STUB_STATE"; then
+        echo "[~] $a_name is not stubbed on this TV; not answering for it"
+        return 0
+    fi
+    if ! command -v node >/dev/null 2>&1; then
+        echo "[-] answering for $a_name needs node, which this TV lacks"
+        return 0
+    fi
+    a_token="$(date +%s)-$$"
+    echo "$a_token" > "$a_file"
+    (
+        trap - EXIT HUP INT TERM
+        trap '' HUP
+        a_failures=0
+        while [ "$(cat "$a_file" 2>/dev/null)" = "$a_token" ]; do
+            if [ "$a_failures" -ge "$ANSWER_MAX_FAILURES" ]; then
+                echo "[-] gave up answering for $a_name: $(tail -n 1 "$a_file.err" 2>/dev/null)"
+                exit 0
+            fi
+            a_started="$(uptime_seconds)"
+            NODE_PATH=/usr/lib/nodejs node "$DIR/nospy-luna-stub.js" "$a_service" \
+                </dev/null >/dev/null 2>"$a_file.err" &
+            a_pid=$!
+            echo "$a_pid" > "$a_file.pid"
+            # answer_stop removes the token and then reads the pid, so either
+            # it sees this pid or this sees the token gone. Checking only before
+            # the start could leave a stub holding the name of a restored service.
+            if [ "$(cat "$a_file" 2>/dev/null)" != "$a_token" ]; then
+                kill -KILL "$a_pid" 2>/dev/null
+                exit 0
+            fi
+            wait "$a_pid"
+            if [ "$(($(uptime_seconds) - a_started))" -ge "$ANSWER_HEALTHY_SECONDS" ]; then
+                a_failures=0
+            else
+                a_failures=$((a_failures + 1))
+            fi
+            sleep "$ANSWER_RETRY_SECONDS"
+        done
+    ) &
+    echo "[+] answering for $a_name"
+}
+
+# Stop answering for one service, leaving its name free for the real one.
+answer_stop() {
+    a_file="$ANSWER_PREFIX.$1"
+    rm -f "$a_file"
+    answer_running "$1" && kill -KILL "$a_pid" 2>/dev/null
+    rm -f "$a_file.pid" "$a_file.err"
+    return 0
+}
+
 # Print "<pid> <exe-path>" for every process in one pass. readlink/grep per pid
 # costs hundreds of forks, which is seconds slow on a TV this busy.
 proc_exe_table() {
@@ -755,6 +852,9 @@ upnp_restore() {
 # Put back everything the toggles may have stopped: unstub the executables
 # first, then let the units come back up.
 services_restore() {
+    for a_service in $ANSWERED_SERVICES; do
+        answer_stop "$a_service"
+    done
     stub_clear_all
     upnp_unstub
     units_restore
