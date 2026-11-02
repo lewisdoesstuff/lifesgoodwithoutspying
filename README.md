@@ -125,6 +125,35 @@ is stopped and reported as failed, so the app never waits forever. Over SSH,
 `nospy-ctl.sh job` (or `status`) shows `job=running|done|failed|idle` and
 `nospy-ctl.sh joblog` prints the last job's output.
 
+## Uninstall
+
+Uninstalling the app only deletes its folder. webOS gives the app no chance
+to clean up first, so protection stays on. Turn it off before you remove it:
+
+1. Open the app and select "Disable protection". This unmounts `/etc/hosts`
+   and the stubs, starts the stopped services again, rolls back the DNS
+   filter and removes the boot hook.
+2. Uninstall the app from the Homebrew Channel.
+
+Your settings and the log stay in `/var/lib/webosbrew/`, so a reinstall picks
+them up. To remove them too, run as root:
+
+```
+rm -f /var/lib/webosbrew/lifesgoodwithoutspying*
+```
+
+Already uninstalled without disabling? A reboot undoes most of it, but two
+things outlast it: the boot hook link, left pointing at nothing, and, if
+"Turn off IPv6" was on, ConnMan's IPv6 setting, which stays off. For IPv6,
+reinstall the app, select "Disable protection" and uninstall again. Do that
+before you delete anything: the rollback reads the files above, and the app
+only offers "Disable protection" while the boot hook link exists. Otherwise
+remove the link:
+
+```
+rm -f /var/lib/webosbrew/init.d/50-lifesgoodwithoutspying
+```
+
 ## Notes
 
 - **LG SDP / clock sync** is enabled by default. webOS normally gets its clock
