@@ -219,8 +219,11 @@
             var c = status.cell(model, el.getAttribute('data-cell'), graceLeft());
             el.className = c.cls;
             setText(el, c.key, c.params);
+            el.hidden = !!model.dnsUnsupported && NAT_KEYS.indexOf(el.getAttribute('data-cell')) !== -1;
         });
     }
+    // Settings that need iptables NAT; hidden on TVs whose kernel lacks it.
+    var NAT_KEYS = ['dns.filter', 'dns.disable_ipv6'];
     function renderPanes() {
         var usable = root === true && !!model;
         var noNat = usable && model.dnsUnsupported;
@@ -229,10 +232,10 @@
             btn.classList.toggle('on', on);
             btn.classList.toggle('pend', usable && !!model.dirty[key]);
             btn.setAttribute('aria-checked', on ? 'true' : 'false');
-            btn.disabled = busy || !usable || (noNat && (key === 'dns.filter' || key === 'dns.disable_ipv6'));
+            btn.disabled = busy || !usable;
+            // A TV without iptables NAT can't run the DNS filter at all.
+            btn.hidden = noNat && NAT_KEYS.indexOf(key) !== -1;
         });
-        setText(byId('dns-detail'), noNat ? 'item.dns.filter.unsupported' : 'item.dns.filter.detail');
-        setText(byId('ipv6-detail'), noNat ? 'item.dns.filter.unsupported' : 'item.dns.disable_ipv6.detail');
         setText(byId('sdp-detail'), usable && model.saved['clock.ntp'] ? 'item.domains.sdp.detailNtp' : 'item.domains.sdp.detail');
         var groups = {};
         if (usable)
