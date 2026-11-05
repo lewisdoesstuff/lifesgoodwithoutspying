@@ -326,6 +326,16 @@ has_unit_manager() {
     command -v systemctl >/dev/null 2>&1 || command -v initctl >/dev/null 2>&1
 }
 
+# Exit 0 if the kernel can do the NAT the DNS filter's divert needs. Some
+# builds ship the iptables binary without the ip_tables module (seen on an LG
+# B5, webOS 25): the nat table never initialises, so the handoff can only fail
+# and roll back. Pointing ConnMan's nameserver at the helper instead was tried
+# and dropped (013c575), so there is no fallback for these TVs.
+dns_filter_supported() {
+    command -v iptables >/dev/null 2>&1 &&
+        bounded iptables -t nat -n -L OUTPUT >/dev/null 2>&1
+}
+
 # Process targets.
 #
 # LG starts most of these from the Luna hub (ls-hubd), so killing a process only

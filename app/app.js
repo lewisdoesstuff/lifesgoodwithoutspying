@@ -223,13 +223,16 @@
     }
     function renderPanes() {
         var usable = root === true && !!model;
+        var noNat = usable && model.dnsUnsupported;
         each('.item[data-key]', function (btn) {
             var key = btn.getAttribute('data-key'), on = usable && !!model.saved[key];
             btn.classList.toggle('on', on);
             btn.classList.toggle('pend', usable && !!model.dirty[key]);
             btn.setAttribute('aria-checked', on ? 'true' : 'false');
-            btn.disabled = busy || !usable;
+            btn.disabled = busy || !usable || (noNat && (key === 'dns.filter' || key === 'dns.disable_ipv6'));
         });
+        setText(byId('dns-detail'), noNat ? 'item.dns.filter.unsupported' : 'item.dns.filter.detail');
+        setText(byId('ipv6-detail'), noNat ? 'item.dns.filter.unsupported' : 'item.dns.disable_ipv6.detail');
         setText(byId('sdp-detail'), usable && model.saved['clock.ntp'] ? 'item.domains.sdp.detailNtp' : 'item.domains.sdp.detail');
         var groups = {};
         if (usable)

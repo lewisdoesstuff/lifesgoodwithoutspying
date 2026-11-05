@@ -95,6 +95,16 @@ and it defaults off. Its companion `dns.disable_ipv6` setting also defaults
 off. See its [README](dns-filter/README.md) for the Bun build/test commands and
 the ConnMan/firewall behavior.
 
+The filter needs iptables NAT to divert port 53 into the helper. Some TVs ship
+the `iptables` binary without the kernel's `ip_tables` module (seen on an LG B5,
+webOS 25: `can't initialize iptables table 'nat'`). There the handoff can only
+fail, so the app checks for NAT first: both DNS toggles are disabled and say
+why, `set dns.filter on` is refused, and a setting already saved as on is
+switched off at the next apply. There is no fallback for these TVs. Pointing
+ConnMan's nameserver at the helper was tried and dropped (it fell back to the
+real upstream on the emulator and broke DNS on webOS 6), and pointing
+`resolv.conf` at it would only cover lookups the hosts file already sees.
+
 ## Install
 
 With the TV reachable over SSH, either sideload it:

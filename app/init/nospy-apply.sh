@@ -302,6 +302,14 @@ apply_dns_filter() {
         echo "[-] DNS handoff state exists but its rollback script is missing"
         return 1
     fi
+    if is_on dns.filter && ! dns_filter_supported; then
+        # A setting saved before this check existed, or copied from another
+        # TV. The handoff would only fail, so switch it off for good.
+        echo "[~] DNS filter needs iptables NAT, which this kernel lacks; turning dns.filter and dns.disable_ipv6 off"
+        conf_set dns.filter off
+        conf_set dns.disable_ipv6 off
+        cat "$CONF" > "$CONF_APPLIED" 2>/dev/null
+    fi
     if is_on dns.filter; then
         if [ ! -x "$DNS_FILTER_INIT" ] || [ ! -f "$DIR/nospy-dns-filter.js" ]; then
             echo "[-] DNS filter is enabled but its helper bundle is missing"
