@@ -275,6 +275,7 @@ case "$1" in
         echo "dns_filter_ipv6_mode=$(dns_filter_field handoff_ipv6_mode)"
         echo "connman_ipv6=$(dns_filter_field connman_ipv6)"
         echo "stubs=$(stub_count)"
+        echo "service_overrides=$(service_count)"
         # The saved settings: bare for older frontends, and as saved.<key> so
         # the UI can tell settings apart from other on/off lines.
         conf_effective "$CONF" > "$TMP.conf"

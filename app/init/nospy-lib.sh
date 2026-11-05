@@ -342,10 +342,13 @@ THINQ_NAMES="trigger_thinq trigger_alexa iot-proxy iot-client mqtt-client lg.thi
 SERVICE_GROUPS="voice ads thinq lan"
 
 # "<name> <path>" for every executable one group targets. Each name gets the
-# canonical directories plus any per-app jail copy: jails hardlink the /usr/sbin
-# binaries and a process may run from the jail path rather than the host one, so
-# both need stubbing. Unmatched jail globs stay literal and are skipped by
-# stub_mount's -f test. Launchers and copies outside those directories follow.
+# canonical directories plus any per-app jail copy, because a process may run
+# from the jail path rather than the host one. A jail gets a fresh /usr when the
+# jailer sets it up, without any stub bound over the host path, so stubbing a
+# jail path only holds for a jail that is already set up; services the hub
+# starts through the jailer are handled by jailed_service_files. Unmatched jail
+# globs stay literal and are skipped by stub_mount's -f test. Launchers and
+# copies outside those directories follow.
 group_targets() {
     case "$1" in
         voice) names="$VOICE_NAMES" ;;
@@ -476,9 +479,10 @@ stub_mount() {
     return "$s_rc"
 }
 
-# Unmount everything stubbed for one category.
+# Unmount everything stubbed for one category, and its service overrides.
 stub_clear_key() {
     key="$1"
+    service_clear_key "$key"
     [ -f "$STUB_STATE" ] || return 0
     awk -v k="$key" '$1 == k { print $2 }' "$STUB_STATE" |
         while IFS= read -r path; do
@@ -490,8 +494,9 @@ stub_clear_key() {
     mv "$STUB_STATE.tmp" "$STUB_STATE"
 }
 
-# Unmount every stub we own.
+# Unmount every stub and service override we own.
 stub_clear_all() {
+    service_clear_all
     [ -f "$STUB_STATE" ] || return 0
     awk '{ print $2 }' "$STUB_STATE" |
         while IFS= read -r path; do
@@ -499,6 +504,115 @@ stub_clear_all() {
             unbind_ours "$path" "/${STUB_FILE##*/}"
         done
     rm -f "$STUB_STATE"
+}
+
+# Services the hub starts through the jailer: their .service file runs
+# "jailer ... <executable>", and the jail gets a fresh /usr when it is set up,
+# so the stub bound over the host executable isn't inside it (seen on an LG B5,
+# webOS 25: performer ran from its jail with voice.stop on). For those we bind
+# a copy of the .service file whose Exec is the stub over the original, and
+# have the hub rescan. Builds with no jailed targets, or without ls-control,
+# are left as they were.
+LUNA_SERVICE_DIR="/usr/share/luna-service2/services.d"
+SERVICE_OVERRIDE_DIR="/var/lib/webosbrew/lifesgoodwithoutspying.services"
+SERVICE_STATE="/var/lib/webosbrew/lifesgoodwithoutspying.overridden"
+
+# Set when an override is added or removed, so the caller rescans once.
+SERVICES_CHANGED=
+
+# The .service files whose Exec runs, through the jailer, an executable listed
+# in file $1. Reads the files as they are now, so call it with no override of
+# ours mounted.
+jailed_service_files() {
+    for o_file in "$LUNA_SERVICE_DIR"/*.service; do
+        [ -f "$o_file" ] || continue
+        o_exec="$(sed -n 's/^Exec=//p' "$o_file" | head -n 1)"
+        case "$o_exec" in
+            jailer\ *|*/jailer\ *) ;;
+            *) continue ;;
+        esac
+        grep -qxF "${o_exec##* }" "$1" 2>/dev/null && printf '%s\n' "$o_file"
+    done
+    return 0
+}
+
+# Write to stdout the .service file $1 with its Exec replaced by the stub.
+service_override_body() {
+    sed "s#^Exec=.*#Exec=$STUB_FILE#" "$1"
+}
+
+# The suffix mountinfo shows for our override of .service file $1.
+service_override_suffix() {
+    echo "/${SERVICE_OVERRIDE_DIR##*/}/${1##*/}"
+}
+
+# Bind an override over one jailed .service file and remember it.
+service_override() {
+    o_key="$1"
+    o_path="$2"
+    o_copy="$SERVICE_OVERRIDE_DIR/${o_path##*/}"
+    mkdir -p "$SERVICE_OVERRIDE_DIR" 2>/dev/null || return 1
+    if ! mount_is_shown "$o_path" "$(service_override_suffix "$o_path")"; then
+        service_override_body "$o_path" > "$o_copy" || return 1
+        mount --bind "$o_copy" "$o_path" 2>/dev/null || return 1
+    fi
+    echo "$o_key $o_path" >> "$SERVICE_STATE"
+    SERVICES_CHANGED=1
+    return 0
+}
+
+# Unmount the service overrides one category made.
+service_clear_key() {
+    o_key="$1"
+    [ -f "$SERVICE_STATE" ] || return 0
+    awk -v k="$o_key" '$1 == k { print $2 }' "$SERVICE_STATE" > "$SERVICE_STATE.paths"
+    while IFS= read -r o_path; do
+        [ -n "$o_path" ] || continue
+        o_suffix="$(service_override_suffix "$o_path")"
+        if mount_is_ours "$o_path" "$o_suffix"; then
+            unbind_ours "$o_path" "$o_suffix"
+            SERVICES_CHANGED=1
+        fi
+    done < "$SERVICE_STATE.paths"
+    rm -f "$SERVICE_STATE.paths"
+    awk -v k="$o_key" '$1 != k' "$SERVICE_STATE" > "$SERVICE_STATE.tmp" 2>/dev/null ||
+        : > "$SERVICE_STATE.tmp"
+    mv "$SERVICE_STATE.tmp" "$SERVICE_STATE"
+}
+
+# Unmount every service override we own.
+service_clear_all() {
+    [ -f "$SERVICE_STATE" ] || return 0
+    for o_all_key in $(awk '{ print $1 }' "$SERVICE_STATE" | sort -u); do
+        service_clear_key "$o_all_key"
+    done
+    rm -f "$SERVICE_STATE"
+    services_rescan
+}
+
+# Have the hub reread the service files, if anything changed since the last
+# rescan. ls-control is run by its full path: the boot hook's PATH isn't
+# exported, so a child that timeout starts can't find /usr/sbin/ls-control
+# (rc=127 on every boot apply on a B5).
+services_rescan() {
+    [ -n "$SERVICES_CHANGED" ] || return 0
+    SERVICES_CHANGED=
+    o_lsc="$(command -v ls-control 2>/dev/null)"
+    [ -n "$o_lsc" ] || return 0
+    if bounded "$o_lsc" scan-services >/dev/null 2>&1; then
+        echo "[+] hub rescanned the service files"
+    else
+        echo "[-] ls-control scan-services failed (rc=$?)"
+    fi
+}
+
+# How many .service files we currently override.
+service_count() {
+    if [ -f "$SERVICE_STATE" ]; then
+        grep -c . "$SERVICE_STATE" 2>/dev/null || echo 0
+    else
+        echo 0
+    fi
 }
 
 # How many executables we currently have stubbed.

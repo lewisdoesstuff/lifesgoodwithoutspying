@@ -26,11 +26,12 @@ DOMAINS_TMP="/tmp/lifesgoodwithoutspying.domains.$$"
 KEYS_TMP="/tmp/lifesgoodwithoutspying.keys.$$"
 UNITS_TMP="/tmp/lifesgoodwithoutspying.units.$$"
 EXECS_TMP="/tmp/lifesgoodwithoutspying.execs.$$"
+SERVICES_TMP="/tmp/lifesgoodwithoutspying.services.$$"
 APPS_TMP="/tmp/lifesgoodwithoutspying.apps.$$"
 
 # Scratch files are per-run and multi-megabyte-free, but never cleaned before;
 # remove them however we exit.
-trap 'rm -f "$DOMAINS_TMP" "$KEYS_TMP" "$UNITS_TMP" "$EXECS_TMP" "$APPS_TMP" "$DNS_BLOCKLIST.tmp.$$" "$DNS_BLOCKLIST.sdp.$$"' EXIT
+trap 'rm -f "$DOMAINS_TMP" "$KEYS_TMP" "$UNITS_TMP" "$EXECS_TMP" "$SERVICES_TMP" "$APPS_TMP" "$DNS_BLOCKLIST.tmp.$$" "$DNS_BLOCKLIST.sdp.$$"' EXIT
 # An untrapped SIGTERM (the job cap's first signal) ends the shell without
 # running the EXIT trap, so turn it into a normal exit.
 trap 'exit 143' INT TERM
@@ -358,6 +359,7 @@ apply_stub_category() {
 
     if ! is_on "$key"; then
         stub_clear_key "$key"
+        services_rescan
         if has_unit_manager; then
             "$unit_fn" > "$UNITS_TMP"
             while IFS= read -r unit; do
@@ -394,6 +396,21 @@ apply_stub_category() {
     else
         echo "[+] $key: stubbed $n executable(s)"
     fi
+
+    # Services the hub starts through the jailer get a fresh /usr without the
+    # stub, so point their .service file at the stub instead.
+    if command -v ls-control >/dev/null 2>&1; then
+        jailed_service_files "$EXECS_TMP" > "$SERVICES_TMP"
+        n=0
+        while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            if service_override "$key" "$path"; then
+                n=$((n + 1))
+            fi
+        done < "$SERVICES_TMP"
+        [ "$n" -eq 0 ] || echo "[+] $key: pointed $n jailed service(s) at the stub"
+    fi
+    services_rescan
 
     kill_by_paths "$EXECS_TMP"
     for service in $answered; do
