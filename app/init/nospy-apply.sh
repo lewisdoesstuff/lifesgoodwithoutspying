@@ -380,13 +380,20 @@ apply_stub_category() {
     stub_write
     stub_clear_key "$key"
     n=0
+    shared=0
     while IFS= read -r path; do
         [ -n "$path" ] || continue
-        if stub_mount "$key" "$path"; then
-            n=$((n + 1))
-        fi
+        stub_mount "$key" "$path"
+        case $? in
+            0) n=$((n + 1)) ;;
+            2) shared=$((shared + 1)) ;;
+        esac
     done < "$EXECS_TMP"
-    echo "[+] $key: stubbed $n executable(s)"
+    if [ "$shared" -gt 0 ]; then
+        echo "[+] $key: stubbed $n executable(s), $shared more through a shared jail mount"
+    else
+        echo "[+] $key: stubbed $n executable(s)"
+    fi
 
     kill_by_paths "$EXECS_TMP"
     for service in $answered; do

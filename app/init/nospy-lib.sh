@@ -418,14 +418,62 @@ stub_write() {
     chmod 755 "$STUB_FILE"
 }
 
-# Bind the stub over one executable and remember it.
+MOUNTINFO="/proc/self/mountinfo"
+
+# Exit 0 unless the topmost mount at path $1 is a bind of a file whose path ends
+# in $2. The state file outlives a reboot, so a recorded path may by then hold
+# nothing, or another tool's bind. When the mount table can't be read, this
+# answers yes, so unmounting works as it did before the check.
+mount_is_ours() {
+    [ -r "$MOUNTINFO" ] || return 0
+    awk -v p="$1" -v s="$2" '
+        $5 == p { top = $4 }
+        END {
+            n = length(s)
+            exit !(top != "" && length(top) >= n && substr(top, length(top) - n + 1) == s)
+        }' "$MOUNTINFO"
+}
+
+# Exit 0 if the topmost mount at path $1 is a bind of a file whose path ends in
+# $2. Unlike mount_is_ours, an unreadable mount table answers no, so the caller
+# binds as it did before the check.
+mount_is_shown() {
+    [ -r "$MOUNTINFO" ] || return 1
+    mount_is_ours "$1" "$2"
+}
+
+# Unmount our binds at path $1, made from a file whose path ends in $2, down to
+# the first mount that isn't ours, so stacks left by earlier versions come off
+# too. Bounded, in case an unmount keeps failing.
+unbind_ours() {
+    u_left=64
+    while [ "$u_left" -gt 0 ] && mount_is_ours "$1" "$2"; do
+        umount "$1" 2>/dev/null || umount -l "$1" 2>/dev/null || return 1
+        u_left=$((u_left - 1))
+        # without a mount table every check says yes: one unmount, as before
+        [ -r "$MOUNTINFO" ] || return 0
+    done
+    return 0
+}
+
+# Bind the stub over one executable and remember it. Returns 2 for a path that
+# already shows our stub, which is only recorded: a jail whose /usr is a
+# shared peer of the host's /usr gets a copy of every bind made on the host
+# path, so binding the jail path too would stack a second stub there, which
+# propagates back. The stacks then double on every apply (seen on an LG B5,
+# webOS 25: 512 deep and 36k mounts, until mount failed with ENOSPC).
 stub_mount() {
     key="$1"
     path="$2"
     [ -f "$path" ] || return 1
-    mount --bind "$STUB_FILE" "$path" 2>/dev/null || return 1
+    s_rc=0
+    if mount_is_shown "$path" "/${STUB_FILE##*/}"; then
+        s_rc=2
+    else
+        mount --bind "$STUB_FILE" "$path" 2>/dev/null || return 1
+    fi
     echo "$key $path" >> "$STUB_STATE"
-    return 0
+    return "$s_rc"
 }
 
 # Unmount everything stubbed for one category.
@@ -435,7 +483,7 @@ stub_clear_key() {
     awk -v k="$key" '$1 == k { print $2 }' "$STUB_STATE" |
         while IFS= read -r path; do
             [ -n "$path" ] || continue
-            umount "$path" 2>/dev/null || umount -l "$path" 2>/dev/null
+            unbind_ours "$path" "/${STUB_FILE##*/}"
         done
     awk -v k="$key" '$1 != k' "$STUB_STATE" > "$STUB_STATE.tmp" 2>/dev/null ||
         : > "$STUB_STATE.tmp"
@@ -448,7 +496,7 @@ stub_clear_all() {
     awk '{ print $2 }' "$STUB_STATE" |
         while IFS= read -r path; do
             [ -n "$path" ] || continue
-            umount "$path" 2>/dev/null || umount -l "$path" 2>/dev/null
+            unbind_ours "$path" "/${STUB_FILE##*/}"
         done
     rm -f "$STUB_STATE"
 }
