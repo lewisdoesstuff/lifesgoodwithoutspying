@@ -12,6 +12,8 @@
 INITD="/var/lib/webosbrew/init.d"
 LINK="$INITD/50-lifesgoodwithoutspying"
 LOG="/var/lib/webosbrew/lifesgoodwithoutspying.log"
+# The most recent self-test report.
+SELFTEST_LOG="/var/lib/webosbrew/lifesgoodwithoutspying-selftest.log"
 TMP="/tmp/lifesgoodwithoutspying.ctl.$$"
 
 # Drop our scratch files however we exit.
@@ -289,6 +291,11 @@ case "$1" in
         proc_states "$TMP.proc"
         ;;
     selftest)
+        # Also keep the report on the TV, so it can be read over SSH or
+        # attached to a bug report instead of copied off the screen.
+        {
+        echo "== self-test $(date -u '+%Y-%m-%d %H:%M:%S') UTC, $(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$DIR/../appinfo.json" 2>/dev/null) =="
+        echo
         echo "== generated host sink (host-side check) =="
         echo "state: $(hosts_state)   (ours = active)"
         echo "configured entries: $(blocklist_count)"
@@ -383,6 +390,8 @@ case "$1" in
         find /var/log /tmp /var/run -maxdepth 3 -type f \
             \( -iname '*acr*' -o -iname '*voice*' -o -iname '*alphonso*' -o -iname '*stt*' \) \
             2>/dev/null | wc -l
+        } 2>&1 | tee "$SELFTEST_LOG.tmp"
+        mv "$SELFTEST_LOG.tmp" "$SELFTEST_LOG" 2>/dev/null
         ;;
     log)
         if [ -f "$LOG" ]; then
