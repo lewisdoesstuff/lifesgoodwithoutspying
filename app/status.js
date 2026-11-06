@@ -92,6 +92,8 @@ window.nospyStatus = (function () {
             hostsDown: enabled && Object.keys(live).some(function (k) { return k.indexOf('domains.') === 0 && live[k]; }) &&
                 (map.hosts === 'open' || map.hosts === 'external') ? map.hosts : '',
             dnsDown: !!live['dns.filter'] && map.dns_filter !== 'yes',
+            // The kernel can't do the NAT the DNS filter needs.
+            dnsUnsupported: map.dns_filter_supported === 'no',
             ipv4Only: !!live['dns.filter'] && !live['dns.disable_ipv6'],
             sdpWait: map.hosts === 'waiting'
         };
