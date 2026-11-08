@@ -241,7 +241,7 @@ case "$1" in
         esac
         case "$key=$val" in
             dns.filter=on|dns.disable_ipv6=on)
-                if ! dns_filter_supported; then
+                if [ "$(dns_filter_nat_check)" = no ]; then
                     echo "$key needs iptables NAT, which this TV's kernel lacks" >&2
                     exit 3
                 fi
@@ -276,11 +276,7 @@ case "$1" in
         [ "$hosts" = waiting ] && echo "hosts_wait=$(hosts_wait_seconds)"
         echo "blocklist=$(blocklist_count)"
         dns_filter_load
-        if dns_filter_supported; then
-            echo "dns_filter_supported=yes"
-        else
-            echo "dns_filter_supported=no"
-        fi
+        echo "dns_filter_supported=$(dns_filter_nat)"
         echo "dns_filter=$(dns_filter_runtime)"
         echo "dns_filter_generation=$(dns_filter_field loaded_generation)"
         echo "dns_filter_rules=$(dns_filter_field loaded_rules)"
@@ -308,9 +304,10 @@ case "$1" in
         echo "  NOTE: this confirms the mount, not how every webOS service resolves names."
         echo
         echo "== DNS filter (ConnMan handoff) =="
-        if ! dns_filter_supported; then
-            echo "unsupported: this kernel has no iptables NAT (ip_tables module missing)"
-        fi
+        case "$(dns_filter_nat_check)" in
+            no) echo "unsupported: this kernel has no iptables NAT (ip_tables module missing)" ;;
+            unknown) echo "NAT check failed this time (iptables busy or slow); not treated as unsupported" ;;
+        esac
         if is_on dns.filter; then
             echo "configured=on"
             dns_filter_load
