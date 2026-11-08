@@ -142,7 +142,7 @@ Your settings and the log stay in `/var/lib/webosbrew/`, so a reinstall picks
 them up. To remove them too, run as root:
 
 ```
-rm -f /var/lib/webosbrew/lifesgoodwithoutspying*
+rm -rf /var/lib/webosbrew/lifesgoodwithoutspying*
 ```
 
 Already uninstalled without disabling? A reboot undoes most of it, but two
