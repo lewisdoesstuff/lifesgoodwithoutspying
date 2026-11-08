@@ -198,6 +198,9 @@
         say(el, line.key, line.params);
         return el;
     }
+    // The settings that need iptables NAT, hidden when the kernel has none.
+    var NAT_KEYS = ['dns.filter', 'dns.disable_ipv6'];
+
     // The status column is hidden until there is a status to show.
     function renderStatus() {
         var box = byId('groups');
@@ -222,8 +225,6 @@
             el.hidden = !!model.dnsUnsupported && NAT_KEYS.indexOf(el.getAttribute('data-cell')) !== -1;
         });
     }
-    // Settings that need iptables NAT; hidden on TVs whose kernel lacks it.
-    var NAT_KEYS = ['dns.filter', 'dns.disable_ipv6'];
     function renderPanes() {
         var usable = root === true && !!model;
         var noNat = usable && model.dnsUnsupported;
