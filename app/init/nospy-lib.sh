@@ -634,6 +634,12 @@ ANSWERED_SERVICES="com.webos.service.admanager com.webos.service.voiceconductor 
 # Token of the current worker for a service, as "<prefix>.<service>"; removing it
 # stops the worker. Companion .pid and .err files sit beside it.
 ANSWER_PREFIX="/tmp/lifesgoodwithoutspying.answer"
+# A service whose name another app answers for, as "<prefix>.<service>", holding
+# that app's pid. Our stand-in steps aside while the pid lives and comes back by
+# itself after. The real executable stays stubbed either way, so a claim can only
+# replace the stand-in, never bring LG's service back. To claim: write the file,
+# then kill the pid in the "<ANSWER_PREFIX>.<service>.pid" file.
+ANSWER_CLAIM_PREFIX="/tmp/lifesgoodwithoutspying.claim"
 # A run this long counts as working, and clears the count of failed runs.
 ANSWER_HEALTHY_SECONDS=60
 ANSWER_MAX_FAILURES=20
@@ -651,6 +657,15 @@ answered_in() {
         answer_exec_listed "$a_service" "$1" && echo "$a_service"
     done
     return 0
+}
+
+# Exit 0 if a live process has claimed service $1, leaving its pid in c_pid.
+answer_claimed() {
+    [ -f "$ANSWER_CLAIM_PREFIX.$1" ] && read -r c_pid < "$ANSWER_CLAIM_PREFIX.$1" || return 1
+    case "$c_pid" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    [ -d "/proc/$c_pid" ]
 }
 
 # Exit 0 if the stub for service $1 is running, leaving its pid in a_pid. A pid
@@ -688,6 +703,11 @@ answer_start() {
                 echo "[-] gave up answering for $a_name: $(tail -n 1 "$a_file.err" 2>/dev/null)"
                 exit 0
             fi
+            if answer_claimed "$a_service"; then
+                a_failures=0
+                sleep "$ANSWER_RETRY_SECONDS"
+                continue
+            fi
             a_started="$(uptime_seconds)"
             NODE_PATH=/usr/lib/nodejs node "$DIR/nospy-luna-stub.js" "$a_service" \
                 </dev/null >/dev/null 2>"$a_file.err" &
@@ -700,8 +720,16 @@ answer_start() {
                 kill -KILL "$a_pid" 2>/dev/null
                 exit 0
             fi
+            # Likewise for a claim: the claimant writes it and then reads the pid.
+            if answer_claimed "$a_service"; then
+                kill -KILL "$a_pid" 2>/dev/null
+                wait "$a_pid" 2>/dev/null
+                continue
+            fi
             wait "$a_pid"
-            if [ "$(($(uptime_seconds) - a_started))" -ge "$ANSWER_HEALTHY_SECONDS" ]; then
+            # A claim that ended this run is not a failure.
+            if answer_claimed "$a_service" ||
+                [ "$(($(uptime_seconds) - a_started))" -ge "$ANSWER_HEALTHY_SECONDS" ]; then
                 a_failures=0
             else
                 a_failures=$((a_failures + 1))

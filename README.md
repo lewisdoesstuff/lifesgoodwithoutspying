@@ -200,6 +200,12 @@ rm -f /var/lib/webosbrew/init.d/50-lifesgoodwithoutspying
   three of those service names and answers the calls they need, without reading
   any ID or touching audio; the self-test reports whether each one is running.
   It needs `node` on the TV.
+- **Claiming a stand-in.** An app that really answers for a stubbed service can
+  ask our stand-in to step aside: it writes its pid to
+  `/tmp/lifesgoodwithoutspying.claim.<service>` and then kills the pid in
+  `/tmp/lifesgoodwithoutspying.answer.<service>.pid`. The stand-in returns once
+  that pid is gone. The real executable stays stubbed, so a claim can't bring
+  LG's service back.
 - **The domain sink is host-based.** The self-test's `getent` and `curl`
   checks only prove that the generated `/etc/hosts` is visible to commands
   using the local resolver. Some webOS services use their own DNS path,

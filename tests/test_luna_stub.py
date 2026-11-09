@@ -117,6 +117,7 @@ DIR="$ROOT"
 STUB_STATE="$ROOT/stubbed"
 ANSWER_PREFIX="$ROOT/answer"
 ANSWER_RETRY_SECONDS=0
+ANSWER_CLAIM_PREFIX="$ROOT/claim"
 ANSWER_MAX_FAILURES=3
 ANSWER_HEALTHY_SECONDS="${HEALTHY:-60}"
 "$@"
@@ -253,6 +254,24 @@ class WorkerTest(unittest.TestCase):
         # The older worker saw the new token and left without starting another.
         time.sleep(0.3)
         self.assertEqual(len(self.stub_pids()), 1)
+        self.assertEqual(self.runs(), 2)
+
+    def test_steps_aside_for_a_live_claim_and_comes_back(self):
+        self.sh("answer_start", self.service)
+        self.assertTrue(self.wait_until(self.running))
+        first = self.stub_pids()
+        claimant = subprocess.Popen(["sleep", "30"])
+        self.addCleanup(claimant.wait)
+        self.addCleanup(claimant.kill)
+        (self.root / f"claim.{self.service}").write_text(f"{claimant.pid}\n", encoding="utf-8")
+        os.kill(first[0], 9)
+        self.assertTrue(self.wait_until(lambda: not self.stub_pids()))
+        time.sleep(0.3)
+        self.assertEqual(self.stub_pids(), [])
+        self.assertEqual(self.runs(), 1)
+        claimant.kill()
+        claimant.wait()
+        self.assertTrue(self.wait_until(self.stub_pids))
         self.assertEqual(self.runs(), 2)
 
     def test_stale_pid_file_does_not_kill_an_unrelated_process(self):
