@@ -92,6 +92,8 @@ selftest_answering() {
             echo "  ${service##*.} stand-in: stepped aside for pid $c_pid"
         elif answer_running "$service"; then
             echo "  ${service##*.} stand-in: answering"
+        elif [ "$service" = com.webos.service.voiceinput ] && voice_mic_kept; then
+            echo "  voiceinput: kept for $(keeper_titles voiceinput), running: $(pidof voiceinput >/dev/null && echo yes || echo no)"
         else
             echo "  ${service##*.} stand-in: stopped"
         fi
@@ -292,6 +294,10 @@ case "$1" in
         fi
         # Also prints voice= and ads=, which older frontends read.
         proc_states "$TMP.proc"
+        # Processes an app keeps running (see keepers), with the apps' titles.
+        if voice_mic_kept; then
+            echo "kept.voice.voiceinput=$(keeper_titles voiceinput)"
+        fi
         ;;
     selftest)
         # Also keep the report on the TV, so it can be read over SSH or

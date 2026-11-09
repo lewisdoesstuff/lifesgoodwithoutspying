@@ -211,7 +211,8 @@ code {
 
 /* One pip per process. Shape carries the state as well as colour: filled
    for stopped, a ring for running, half-filled when it couldn't be checked,
-   small and grey when the service isn't managed. */
+   small and grey when the service isn't managed, and blue when an app has
+   registered to keep it running. */
 .pip {
   width: 1vh;
   height: 1vh;
@@ -223,6 +224,7 @@ code {
 .pip.running { background: transparent; box-shadow: inset 0 0 0 0.2vh #D4554A; }
 .pip.unknown { background: linear-gradient(90deg, #DFA63C 50%, transparent 50%); box-shadow: inset 0 0 0 0.14vh #DFA63C; }
 .pip.idle { background: #3B474B; }
+.pip.kept { background: #5AA9E6; }
 
 .cells > span {
   width: calc(16.666% - 0.26vw);

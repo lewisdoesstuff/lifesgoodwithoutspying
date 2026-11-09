@@ -336,10 +336,71 @@ has_unit_manager() {
 
 # The executables each service toggle stops, by name. The names are also what
 # status reports, one proc.<group>.<name> line each.
-VOICE_NAMES="voiceinput voiceinput_network voiceinput_preprocessor voiceinput_hidraw voiceinput_sound voiceconductor voiceclick nlpmanager performer"
+VOICE_NAMES="voiceinput_network voiceinput_preprocessor voiceinput_hidraw voiceinput_sound voiceconductor voiceclick nlpmanager performer"
 ADS_NAMES="admanager livepick acr2 nudge rdxd uploadd sportsalarm adoverlay-service"
 THINQ_NAMES="trigger_thinq trigger_alexa iot-proxy iot-client mqtt-client lg.thinqai.adapter amazon-alexa-adapter amazon-alexa-vsk"
 SERVICE_GROUPS="voice ads thinq lan"
+
+# Apps that keep a voice service running while Voice is on, such as an on-TV
+# speech recogniser. Each registers with a file named after its app id, holding
+# the names it keeps, one a line; it removes the file when it no longer needs
+# them, and runs apply after either change. Only names in KEEPABLE count, and
+# only while that app is installed, so a stale file or an uninstalled app
+# changes nothing. Status names each app, and a kept process that is no longer
+# registered is reported as running.
+KEEP_DIR="/var/lib/webosbrew/lifesgoodwithoutspying.keep.d"
+KEEP_APP_DIRS="/media/developer/apps/usr/palm/applications /usr/palm/applications"
+# Only voiceinput can be kept: it passes audio to local callers and makes no
+# network calls of its own (checked on webOS 5.4). A TV that splits capture
+# into voiceinput_* helpers loses the microphone rather than keeping more
+# running than was checked.
+KEEPABLE="voiceinput"
+
+# The installed apps keeping process $1, one id a line.
+keepers() {
+    case " $KEEPABLE " in
+        *" $1 "*) ;;
+        *) return 0 ;;
+    esac
+    [ -d "$KEEP_DIR" ] || return 0
+    for k_file in "$KEEP_DIR"/*; do
+        [ -f "$k_file" ] || continue
+        k_id="${k_file##*/}"
+        case "$k_id" in
+            ''|.*|*[!A-Za-z0-9._-]*) continue ;;
+        esac
+        grep -qx "$1" "$k_file" 2>/dev/null || continue
+        for k_dir in $KEEP_APP_DIRS; do
+            if [ -f "$k_dir/$k_id/appinfo.json" ]; then
+                echo "$k_id"
+                break
+            fi
+        done
+    done
+}
+
+# The title of installed app $1, or its id.
+app_title() {
+    for t_dir in $KEEP_APP_DIRS; do
+        if [ -f "$t_dir/$1/appinfo.json" ]; then
+            t_title="$(sed -n 's/^[[:space:]]*"title"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$t_dir/$1/appinfo.json" | head -n 1)"
+            echo "${t_title:-$1}"
+            return
+        fi
+    done
+    echo "$1"
+}
+
+# The titles of the apps keeping process $1, comma-separated.
+keeper_titles() {
+    keepers "$1" | while read -r kt_id; do app_title "$kt_id"; done | awk 'NR > 1 { printf ", " } { printf "%s", $0 } END { print "" }'
+}
+
+# Exit 0 if voiceinput stays up for an app that registered for it, while the
+# rest of the voice group is stopped. Only matters while Voice is on.
+voice_mic_kept() {
+    is_on voice.stop && [ -n "$(keepers voiceinput)" ]
+}
 
 # "<name> <path>" for every executable one group targets. Each name gets the
 # canonical directories plus any per-app jail copy, because a process may run
@@ -351,7 +412,10 @@ SERVICE_GROUPS="voice ads thinq lan"
 # copies outside those directories follow.
 group_targets() {
     case "$1" in
-        voice) names="$VOICE_NAMES" ;;
+        voice)
+            names="$VOICE_NAMES"
+            voice_mic_kept || names="voiceinput $names"
+            ;;
         ads) names="$ADS_NAMES" ;;
         thinq) names="$THINQ_NAMES" ;;
         # apply_lan stubs only the host binary, with its own script.
@@ -390,7 +454,8 @@ voice_execs() {
 }
 
 voice_units() {
-    printf '%s\n' voiceinput.service voiceconductor.service
+    voice_mic_kept || echo voiceinput.service
+    echo voiceconductor.service
 }
 
 # Apps to ask the application manager to close. They run inside WebAppMgr, so

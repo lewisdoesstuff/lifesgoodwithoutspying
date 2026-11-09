@@ -33,6 +33,10 @@ TVs: ad delivery, Automatic Content Recognition, and always-on voice capture.
   microphone hardware or guarantee that other software cannot access audio;
   target availability and results vary by model and firmware. The remote voice
   key may stop working.
+- Leaves `voiceinput` running while the rest of the voice group stays stopped,
+  for as long as an installed app that runs speech recognition on the TV, such
+  as [Local Voice](https://github.com/haywirephoenix/webos-localvoice), has
+  registered for it. Status names that app.
 - Bind-mounts an inert stub over each target binary, so the Luna hub cannot
   respawn it (no polling loop).
 - For targets the Luna hub starts inside a jail (`Exec=/usr/bin/jailer ...`,
@@ -200,6 +204,16 @@ rm -f /var/lib/webosbrew/init.d/50-lifesgoodwithoutspying
   three of those service names and answers the calls they need, without reading
   any ID or touching audio; the self-test reports whether each one is running.
   It needs `node` on the TV.
+- **Apps that keep `voiceinput`.** An app that needs the microphone can keep
+  `voiceinput` running while the rest of the voice group (`voiceconductor`,
+  `nlpmanager`, etc.) stays stubbed.
+  - To register: write a file named `<app_id>` containing `voiceinput` to
+    `/var/lib/webosbrew/lifesgoodwithoutspying.keep.d/`, then run
+    `nospy-ctl.sh apply`. It only counts while that app is installed.
+  - To unregister: remove the file and run `nospy-ctl.sh apply` again.
+  - On webOS 5.4, `voiceinput` passes audio to a local socket and makes no
+    network calls of its own. Homebrew runs as root, so this relies on apps
+    cooperating.
 - **Claiming a stand-in.** An app that really answers for a stubbed service can
   ask our stand-in to step aside: it writes its pid to
   `/tmp/lifesgoodwithoutspying.claim.<service>` and then kills the pid in
