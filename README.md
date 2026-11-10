@@ -35,6 +35,10 @@ TVs: ad delivery, Automatic Content Recognition, and always-on voice capture.
   key may stop working.
 - Bind-mounts an inert stub over each target binary, so the Luna hub cannot
   respawn it (no polling loop).
+- For targets the Luna hub starts inside a jail (`Exec=/usr/bin/jailer ...`,
+  seen on webOS 25), whose fresh `/usr` doesn't carry the stub, binds a copy of
+  the service's `.service` file with `Exec` set to the stub and has the hub
+  rescan (`ls-control scan-services`).
 - Answers calls to `admanager`, `voiceconductor` and `voiceinput` with a small
   stand-in, so apps and Settings don't hang waiting on them. It returns an
   all-zero ad ID and no voice languages; the real executables stay stubbed.
@@ -138,7 +142,7 @@ Your settings and the log stay in `/var/lib/webosbrew/`, so a reinstall picks
 them up. To remove them too, run as root:
 
 ```
-rm -f /var/lib/webosbrew/lifesgoodwithoutspying*
+rm -rf /var/lib/webosbrew/lifesgoodwithoutspying*
 ```
 
 Already uninstalled without disabling? A reboot undoes most of it, but two
