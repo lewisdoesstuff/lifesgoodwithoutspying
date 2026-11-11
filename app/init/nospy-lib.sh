@@ -326,6 +326,48 @@ has_unit_manager() {
     command -v systemctl >/dev/null 2>&1 || command -v initctl >/dev/null 2>&1
 }
 
+# Whether the kernel can do the NAT the DNS filter's divert needs: prints yes,
+# no or unknown. Some builds ship the iptables binary without the ip_tables
+# module (seen on an LG B5, webOS 25: "can't initialize iptables table `nat':
+# Table does not exist"), so the handoff can only fail and roll back. Pointing
+# ConnMan's nameserver at the helper instead was tried and dropped (013c575),
+# so there is no fallback for these TVs. Only a missing binary or that error
+# means no. Any other failure, such as the xtables lock being held or the probe
+# timing out during boot, is unknown, which callers must not treat as no.
+# iptables is run by its full path, like ls-control in services_rescan: the
+# boot hook's PATH isn't exported, so timeout couldn't find it (rc=127) and
+# every boot probe would be unknown.
+dns_filter_nat_probe() {
+    n_ipt="$(command -v iptables 2>/dev/null)" || { echo no; return 0; }
+    n_err="$(bounded "$n_ipt" -t nat -n -L OUTPUT 2>&1 >/dev/null)" && { echo yes; return 0; }
+    case "$n_err" in
+        *"can't initialize iptables table"*|*"Table does not exist"*) echo no ;;
+        *) echo unknown ;;
+    esac
+}
+
+# The last definite probe result, written by apply, so status needn't run
+# iptables on every poll.
+DNS_NAT_CACHE="/var/lib/webosbrew/lifesgoodwithoutspying.nat"
+
+# Probe, and cache a definite answer.
+dns_filter_nat_check() {
+    n_res="$(dns_filter_nat_probe)"
+    case "$n_res" in
+        yes|no) echo "$n_res" > "$DNS_NAT_CACHE" 2>/dev/null ;;
+    esac
+    echo "$n_res"
+}
+
+# The cached answer, probing only if there is none yet.
+dns_filter_nat() {
+    n_res="$(cat "$DNS_NAT_CACHE" 2>/dev/null)"
+    case "$n_res" in
+        yes|no) echo "$n_res" ;;
+        *) dns_filter_nat_check ;;
+    esac
+}
+
 # Process targets.
 #
 # LG starts most of these from the Luna hub (ls-hubd), so killing a process only
