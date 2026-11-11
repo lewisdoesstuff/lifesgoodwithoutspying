@@ -83,6 +83,13 @@ class StatusModelTest(unittest.TestCase):
         self.assertEqual(m["groups"][0][2], "voiceinput:kept")
         self.assertEqual(m["groups"][0][3], "state.stopped")
 
+    def test_claimed_process(self):
+        # LG's voiceconductor stays stubbed while an app answers for it: its own
+        # dot turns blue and names the app, and it's still protected.
+        m = model(BASE + ["proc.voice.voiceconductor=stopped", "claimed.voice.voiceconductor=Local Voice"])
+        self.assertEqual(m["verdict"], "verdict.protected")
+        self.assertEqual(m["groups"][0][2], "voiceinput:stopped voiceconductor:kept")
+
     def test_running_listed_process_wins(self):
         m = model(edit(saved__ads__stop="on", applied__ads__stop="on"))
         self.assertEqual((m["verdict"], m["why"]), ("verdict.partial", "why.running"))

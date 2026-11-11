@@ -118,6 +118,9 @@ STUB_STATE="$ROOT/stubbed"
 ANSWER_PREFIX="$ROOT/answer"
 ANSWER_RETRY_SECONDS=0
 ANSWER_CLAIM_PREFIX="$ROOT/claim"
+EXCEPT_DIR="$ROOT/exceptions.d"
+EXCEPT_APP_DIR="$ROOT/apps"
+CONF_APPLIED="$ROOT/applied"
 ANSWER_MAX_FAILURES=3
 ANSWER_HEALTHY_SECONDS="${HEALTHY:-60}"
 "$@"
@@ -256,14 +259,34 @@ class WorkerTest(unittest.TestCase):
         self.assertEqual(len(self.stub_pids()), 1)
         self.assertEqual(self.runs(), 2)
 
+    def claimant(self, allowed=True):
+        """Start a process from an app's folder, registered and (if allowed)
+        allowed to claim this service, and write its claim."""
+        app = "com.example.claimant"
+        (self.root / "apps" / app / "bin").mkdir(parents=True)
+        (self.root / "apps" / app / "appinfo.json").write_text('{"title": "Claimant"}\n', encoding="utf-8")
+        script = self.root / "apps" / app / "bin" / "claimant"
+        script.write_text("sleep 30\n", encoding="utf-8")
+        (self.root / "exceptions.d").mkdir()
+        (self.root / "exceptions.d" / app).write_text(f"claim {self.service}\n", encoding="utf-8")
+        if allowed:
+            (self.root / "applied").write_text(f"exception.{app}:claim:{self.service}=on\n", encoding="utf-8")
+        claimant = subprocess.Popen([SHELL, str(script)])
+        self.addCleanup(claimant.wait)
+        self.addCleanup(claimant.kill)
+        # Until it has exec'd, the child still has this process's command line.
+        cmdline = Path(f"/proc/{claimant.pid}/cmdline")
+        self.assertTrue(self.wait_until(lambda: str(script).encode() in cmdline.read_bytes()))
+        # Field 22, counted from the last ")" as the name can hold spaces.
+        start = Path(f"/proc/{claimant.pid}/stat").read_text().rsplit(")", 1)[1].split()[19]
+        (self.root / f"claim.{self.service}").write_text(f"{claimant.pid} {start} {app}\n", encoding="utf-8")
+        return claimant
+
     def test_steps_aside_for_a_live_claim_and_comes_back(self):
         self.sh("answer_start", self.service)
         self.assertTrue(self.wait_until(self.running))
         first = self.stub_pids()
-        claimant = subprocess.Popen(["sleep", "30"])
-        self.addCleanup(claimant.wait)
-        self.addCleanup(claimant.kill)
-        (self.root / f"claim.{self.service}").write_text(f"{claimant.pid}\n", encoding="utf-8")
+        claimant = self.claimant()
         os.kill(first[0], 9)
         self.assertTrue(self.wait_until(lambda: not self.stub_pids()))
         time.sleep(0.3)
@@ -272,6 +295,15 @@ class WorkerTest(unittest.TestCase):
         claimant.kill()
         claimant.wait()
         self.assertTrue(self.wait_until(self.stub_pids))
+        self.assertEqual(self.runs(), 2)
+
+    def test_does_not_step_aside_for_a_claim_the_user_has_not_allowed(self):
+        self.sh("answer_start", self.service)
+        self.assertTrue(self.wait_until(self.running))
+        first = self.stub_pids()
+        self.claimant(allowed=False)
+        os.kill(first[0], 9)
+        self.assertTrue(self.wait_until(lambda: self.stub_pids() and self.stub_pids() != first))
         self.assertEqual(self.runs(), 2)
 
     def test_stale_pid_file_does_not_kill_an_unrelated_process(self):

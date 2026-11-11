@@ -204,22 +204,28 @@ rm -f /var/lib/webosbrew/init.d/50-lifesgoodwithoutspying
   three of those service names and answers the calls they need, without reading
   any ID or touching audio; the self-test reports whether each one is running.
   It needs `node` on the TV.
-- **Apps that keep `voiceinput`.** An app that needs the microphone can keep
-  `voiceinput` running while the rest of the voice group (`voiceconductor`,
-  `nlpmanager`, etc.) stays stubbed.
-  - To register: write a file named `<app_id>` containing `voiceinput` to
-    `/var/lib/webosbrew/lifesgoodwithoutspying.keep.d/`, then run
-    `nospy-ctl.sh apply`. It only counts while that app is installed.
+- **App exceptions.** A homebrew app can ask to keep `voiceinput` running while
+  the rest of the voice group (`voiceconductor`, `nlpmanager`, etc.) stays
+  stubbed, or to answer for a stubbed service in place of our stand-in. Each
+  request is an exception the user turns on, one by one; all start off.
+  - To register: write a file named `<app_id>` to
+    `/var/lib/webosbrew/lifesgoodwithoutspying.exceptions.d/`, one exception a
+    line: `keep voiceinput` or `claim <service>`, then run `nospy-ctl.sh apply`.
+    It only counts while that app is installed under
+    `/media/developer/apps/usr/palm/applications`.
+  - To allow one: `nospy-ctl.sh set exception.<app_id>:<keep|claim>:<name> on`,
+    then `nospy-ctl.sh apply`.
   - To unregister: remove the file and run `nospy-ctl.sh apply` again.
+  - To claim, once allowed: write `<pid> <start time> <app_id>` to
+    `/tmp/lifesgoodwithoutspying.claim.<service>`, where the start time is field
+    22 of `/proc/<pid>/stat`, then kill the pid in
+    `/tmp/lifesgoodwithoutspying.answer.<service>.pid`. The stand-in steps aside
+    while that process lives and runs from the app's folder, and returns once it
+    is gone. The real executable stays stubbed, so a claim can't bring LG's
+    service back.
   - On webOS 5.4, `voiceinput` passes audio to a local socket and makes no
     network calls of its own. Homebrew runs as root, so this relies on apps
     cooperating.
-- **Claiming a stand-in.** An app that really answers for a stubbed service can
-  ask our stand-in to step aside: it writes its pid to
-  `/tmp/lifesgoodwithoutspying.claim.<service>` and then kills the pid in
-  `/tmp/lifesgoodwithoutspying.answer.<service>.pid`. The stand-in returns once
-  that pid is gone. The real executable stays stubbed, so a claim can't bring
-  LG's service back.
 - **The domain sink is host-based.** The self-test's `getent` and `curl`
   checks only prove that the generated `/etc/hosts` is visible to commands
   using the local resolver. Some webOS services use their own DNS path,
