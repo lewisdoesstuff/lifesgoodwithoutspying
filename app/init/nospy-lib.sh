@@ -334,9 +334,12 @@ has_unit_manager() {
 # so there is no fallback for these TVs. Only a missing binary or that error
 # means no. Any other failure, such as the xtables lock being held or the probe
 # timing out during boot, is unknown, which callers must not treat as no.
+# iptables is run by its full path, like ls-control in services_rescan: the
+# boot hook's PATH isn't exported, so timeout couldn't find it (rc=127) and
+# every boot probe would be unknown.
 dns_filter_nat_probe() {
-    command -v iptables >/dev/null 2>&1 || { echo no; return 0; }
-    n_err="$(bounded iptables -t nat -n -L OUTPUT 2>&1 >/dev/null)" && { echo yes; return 0; }
+    n_ipt="$(command -v iptables 2>/dev/null)" || { echo no; return 0; }
+    n_err="$(bounded "$n_ipt" -t nat -n -L OUTPUT 2>&1 >/dev/null)" && { echo yes; return 0; }
     case "$n_err" in
         *"can't initialize iptables table"*|*"Table does not exist"*) echo no ;;
         *) echo unknown ;;

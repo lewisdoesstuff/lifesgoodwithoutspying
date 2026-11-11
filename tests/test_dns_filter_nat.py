@@ -97,6 +97,19 @@ class NatProbeTest(unittest.TestCase):
         self.assertEqual(lib("dns_filter_nat_check", 4, LOCKED, cache="yes"),
                          ["unknown", "cache=yes"])
 
+    def test_probe_works_when_path_is_not_exported(self):
+        # The boot hook sets PATH without exporting it, so the children that
+        # timeout starts get no PATH and can't find a bare "iptables".
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_iptables(tmp, 0)
+            path = tmp + os.pathsep + os.environ.get("PATH", "")
+            out = subprocess.run(
+                ["env", "-i", shutil.which(os.environ.get("TEST_SHELL", "sh")), "-c",
+                 'PATH="$1"; . "$2"; dns_filter_nat_probe', "sh", path, str(LIB)],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(out.stdout.split(), ["yes"], out.stderr)
+
     def test_status_reads_the_cache_without_probing(self):
         # the fake iptables would say no; the cached yes wins
         self.assertEqual(lib("dns_filter_nat", 3, NO_NAT, cache="yes"), ["yes", "cache=yes"])
