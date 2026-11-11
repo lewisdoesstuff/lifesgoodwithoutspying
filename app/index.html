@@ -59,6 +59,7 @@
       <nav class="rail">
         <button class="sel" data-pane="net"><span data-i18n="rail.hostnames">Hostnames</span><span class="n" data-count="net"></span></button>
         <button data-pane="svc"><span data-i18n="rail.services">Services</span><i class="dot" id="svc-dot" hidden></i><span class="n" data-count="svc"></span></button>
+        <button data-pane="exc"><span data-i18n="rail.exceptions">Exceptions</span><span class="n" data-count="exc"></span></button>
         <button data-pane="res"><span data-i18n="rail.dnsClock">DNS &amp; clock</span><span class="n" data-count="res"></span></button>
         <button data-pane="log"><span data-i18n="rail.log">Log</span></button>
       </nav>
@@ -159,6 +160,12 @@
           </span>
           <span class="procs"></span>
         </button>
+      </section>
+
+      <section class="pane" id="pane-exc" hidden>
+        <p class="note"><i class="pip kept" aria-hidden="true"></i><span data-i18n="note.exceptions">Apps you installed can ask to keep a service running while its group is off, or to answer for a service in place of our stand-in. Each one starts off. One in use shows this blue dot.</span></p>
+        <div id="exceptions"></div>
+        <p class="note" id="exceptions-none" hidden data-i18n="note.exceptionsNone">No app has asked for an exception.</p>
       </section>
 
       <section class="pane" id="pane-res" hidden>

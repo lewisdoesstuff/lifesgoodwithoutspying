@@ -208,6 +208,8 @@ rm -f /var/lib/webosbrew/init.d/50-lifesgoodwithoutspying
   the rest of the voice group (`voiceconductor`, `nlpmanager`, etc.) stays
   stubbed, or to answer for a stubbed service in place of our stand-in. Each
   request is an exception the user turns on, one by one; all start off.
+  - Each one shows in the **Exceptions** tab with the app's name and whether
+    it's in use, and a switch to allow it.
   - To register: write a file named `<app_id>` to
     `/var/lib/webosbrew/lifesgoodwithoutspying.exceptions.d/`, one exception a
     line: `keep voiceinput` or `claim <service>`, then run `nospy-ctl.sh apply`.

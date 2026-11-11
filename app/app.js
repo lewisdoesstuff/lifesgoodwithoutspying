@@ -250,6 +250,47 @@
             });
         });
     }
+    // The Exceptions pane: a switch for each exception an app registered. The
+    // list is rebuilt only when that set changes, so focus stays where it is.
+    function exceptionItem(e) {
+        var btn = make('button', 'item svc exception'), top = make('span', 'top'), text = make('span', 'text');
+        var sw = make('span', 'sw');
+        sw.setAttribute('aria-hidden', 'true');
+        btn.setAttribute('data-key', e.key);
+        btn.setAttribute('role', 'switch');
+        btn.setAttribute('aria-checked', 'false');
+        text.appendChild(make('b'));
+        text.appendChild(make('small'));
+        top.appendChild(sw);
+        top.appendChild(text);
+        top.appendChild(make('span', 'state'));
+        btn.appendChild(top);
+        btn.addEventListener('click', function () { toggle(btn); });
+        return btn;
+    }
+    function renderExceptions() {
+        var list = byId('exceptions'), items = root === true && model ? model.exceptions : [];
+        var keys = items.map(function (e) { return e.key; }).join('\n');
+        if (list.getAttribute('data-keys') !== keys) {
+            clear(list);
+            items.forEach(function (e) { list.appendChild(exceptionItem(e)); });
+            list.setAttribute('data-keys', keys);
+        }
+        byId('exceptions-none').hidden = !(root === true && model) || items.length > 0;
+        items.forEach(function (e, i) {
+            var btn = list.children[i], state = btn.querySelector('.state');
+            // A claimed service goes by its last part, as in the self-test.
+            var name = e.kind === 'claim' ? e.name.split('.').pop() : e.name;
+            // An app can have several, so each is titled with what it covers.
+            setText(btn.querySelector('b'), 'exception.title', { app: e.title, name: name });
+            setText(btn.querySelector('small'), e.kind === 'claim' ? 'exception.claim' : 'exception.keep', { name: name });
+            clear(state);
+            if (e.inUse) {
+                state.appendChild(make('i', 'pip kept'));
+                state.appendChild(make('span', '', t('exception.inUse')));
+            }
+        });
+    }
     // Each category counts the toggles its own pane holds.
     function paneKeys(pane) {
         return Array.prototype.map.call(document.querySelectorAll('#pane-' + pane + ' .item[data-key]'),
@@ -261,7 +302,9 @@
             btn.disabled = busy;
         });
         each('[data-count]', function (el) {
-            el.textContent = usable ? t('rail.count', status.onCount(model, paneKeys(el.getAttribute('data-count')))) : '';
+            var count = usable ? status.onCount(model, paneKeys(el.getAttribute('data-count'))) : null;
+            // Exceptions can have no switches at all.
+            el.textContent = count && count.total ? t('rail.count', count) : '';
         });
         var fault = root === true ? status.serviceFault(model) : '';
         var dot = byId('svc-dot');
@@ -288,6 +331,7 @@
     function render() {
         renderHero(status.hero(model, root, applying, graceLeft()));
         renderStatus();
+        renderExceptions();
         renderPanes();
         renderRail();
         renderFooter();
@@ -409,22 +453,23 @@
                 scheduleStatusPolling();
             });
     }
-    each('.item[data-key]', function (btn) {
-        btn.addEventListener('click', function () {
-            var key = btn.getAttribute('data-key');
-            var next = btn.classList.contains('on') ? 'off' : 'on';
-            // set only saves the key; the main button applies every change at
-            // once. A status call costs seconds, so update the view from the
-            // last known state instead.
-            run(key + ' = ' + next, function () {
-                return tv.ctl('set ' + key + ' ' + next, true);
-            }, function () {
-                if (!statusMap)
-                    return refresh();
-                statusMap['saved.' + key] = next;
-                setStatus(statusMap);
-            });
+    function toggle(btn) {
+        var key = btn.getAttribute('data-key');
+        var next = btn.classList.contains('on') ? 'off' : 'on';
+        // set only saves the key; the main button applies every change at
+        // once. A status call costs seconds, so update the view from the
+        // last known state instead.
+        run(key + ' = ' + next, function () {
+            return tv.ctl('set ' + key + ' ' + next, true);
+        }, function () {
+            if (!statusMap)
+                return refresh();
+            statusMap['saved.' + key] = next;
+            setStatus(statusMap);
         });
+    }
+    each('.item[data-key]', function (btn) {
+        btn.addEventListener('click', function () { toggle(btn); });
     });
     byId('btn-main').addEventListener('click', function () {
         var action = status.mainAction(model);
