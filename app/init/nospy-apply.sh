@@ -304,6 +304,14 @@ apply_dns_filter() {
         return 1
     fi
     nat="$(dns_filter_nat_check)"
+    if is_on dns.filter && [ "$nat" = unknown ]; then
+        # Possibly a passing failure (xtables lock, slow boot). Go by the last
+        # definite answer. With none, try the handoff anyway: it rolls back if
+        # NAT is missing. Leaving it alone would keep the filter off after a
+        # boot until the next apply.
+        nat="$(cat "$DNS_NAT_CACHE" 2>/dev/null)"
+        echo "[~] couldn't check iptables NAT this time; going by the last check (${nat:-none})"
+    fi
     if is_on dns.filter && [ "$nat" = no ]; then
         # A setting saved before this check existed, or copied from another
         # TV. The handoff would only fail, so switch it off for good.
@@ -311,11 +319,6 @@ apply_dns_filter() {
         conf_set dns.filter off
         conf_set dns.disable_ipv6 off
         cat "$CONF" > "$CONF_APPLIED" 2>/dev/null
-    elif is_on dns.filter && [ "$nat" = unknown ]; then
-        # Possibly a passing failure (xtables lock, slow boot): leave the
-        # filter as it is and save nothing, so the next apply checks again.
-        echo "[~] couldn't check iptables NAT this time; leaving the DNS filter as it is"
-        return 0
     fi
     if is_on dns.filter; then
         if [ ! -x "$DNS_FILTER_INIT" ] || [ ! -f "$DIR/nospy-dns-filter.js" ]; then
