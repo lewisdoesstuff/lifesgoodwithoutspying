@@ -27,7 +27,7 @@ console.log(JSON.stringify({
   groups: m.groups.map(g => [g.id, g.label, g.procs.map(p => p.name + ':' + p.pip).join(' '),
                             S.groupLine(g).key]),
   ipv6: S.cell(m, 'dns.disable_ipv6', 30), sdp: S.cell(m, 'domains.sdp', 30),
-  main: S.mainAction(m).command, fault: S.serviceFault(m)
+  main: S.mainAction(m).command, fault: S.serviceFault(m), exceptions: m.exceptions
 }));
 """
 
@@ -89,6 +89,22 @@ class StatusModelTest(unittest.TestCase):
         m = model(BASE + ["proc.voice.voiceconductor=stopped", "claimed.voice.voiceconductor=Local Voice"])
         self.assertEqual(m["verdict"], "verdict.protected")
         self.assertEqual(m["groups"][0][2], "voiceinput:stopped voiceconductor:kept")
+
+    def test_exceptions(self):
+        keep = "exception.com.example.app:keep:voiceinput"
+        claim = "exception.com.example.app:claim:com.webos.service.voiceconductor"
+        m = model(BASE + ["saved.%s=on" % keep, "applied.%s=on" % keep, "saved.%s=on" % claim,
+                          "applied.%s=off" % claim, "exception_app.%s=Example" % keep,
+                          "exception_app.%s=Example" % claim, "exception_in_use.%s=yes" % keep])
+        self.assertEqual(m["exceptions"], [
+            {"key": keep, "app": "com.example.app", "title": "Example", "kind": "keep",
+             "name": "voiceinput", "inUse": True},
+            {"key": claim, "app": "com.example.app", "title": "Example", "kind": "claim",
+             "name": "com.webos.service.voiceconductor", "inUse": False},
+        ])
+        # Turning one on is a change to apply, like any other setting.
+        self.assertEqual(m["dirty"], [claim])
+        self.assertEqual(m["main"], "apply")
 
     def test_running_listed_process_wins(self):
         m = model(edit(saved__ads__stop="on", applied__ads__stop="on"))

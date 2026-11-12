@@ -225,6 +225,10 @@ code {
 .pip.unknown { background: linear-gradient(90deg, #DFA63C 50%, transparent 50%); box-shadow: inset 0 0 0 0.14vh #DFA63C; }
 .pip.idle { background: #3B474B; }
 .pip.kept { background: #5AA9E6; }
+/* Exceptions: the note shows the blue dot an exception in use gets. */
+.note .pip { display: inline-block; margin: 0 0.4vw 0 0; vertical-align: middle; }
+.exception .state { display: flex; align-items: center; color: #5AA9E6; }
+.exception .state .pip { margin: 0 0.45vw 0 0; }
 
 .cells > span {
   width: calc(16.666% - 0.26vw);
