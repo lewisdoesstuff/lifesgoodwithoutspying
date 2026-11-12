@@ -66,6 +66,15 @@ is_on() {
     [ "$(conf_get "$1")" = "on" ]
 }
 
+# Exit 0 if the key was "on" in the last apply (default when unset). Status
+# reads what the TV runs with from here, not from the saved settings, so a
+# change that waits for Apply does not show as if applied.
+applied_on() {
+    a_val="$(awk -v k="$1" 'index($0, k "=") == 1 { v = substr($0, length(k) + 2) }
+        END { print v }' "$CONF_APPLIED" 2>/dev/null)"
+    [ "${a_val:-$(conf_default "$1")}" = "on" ]
+}
+
 # Print every key with the value it has in the given settings file (default
 # when unset), so two files can be compared by what they mean.
 # The file is read once, as status calls this on every poll and a lookup per
@@ -109,6 +118,7 @@ conf_keys() {
         domains.acr domains.smartad domains.quickset domains.dashboard domains.lgrecommends \
         domains.telemetry domains.sdp clock.ntp domains.lgchannels domains.updates \
         domains.thinq domains.wiselg dns.filter dns.disable_ipv6 voice.stop ads.stop lan.block purge.boot
+    exception_keys
 }
 
 # Newline-separated list of domain category keys.
@@ -378,10 +388,130 @@ dns_filter_nat() {
 
 # The executables each service toggle stops, by name. The names are also what
 # status reports, one proc.<group>.<name> line each.
-VOICE_NAMES="voiceinput voiceinput_network voiceinput_preprocessor voiceinput_hidraw voiceinput_sound voiceconductor voiceclick nlpmanager performer"
+VOICE_NAMES="voiceinput_network voiceinput_preprocessor voiceinput_hidraw voiceinput_sound voiceconductor voiceclick nlpmanager performer"
 ADS_NAMES="admanager livepick acr2 nudge rdxd uploadd sportsalarm adoverlay-service"
 THINQ_NAMES="trigger_thinq trigger_alexa iot-proxy iot-client mqtt-client lg.thinqai.adapter amazon-alexa-adapter amazon-alexa-vsk"
 SERVICE_GROUPS="voice ads thinq lan"
+
+# Exceptions: an app the user installed can keep a process of a service group
+# that is off, or answer for a service in place of our stand-in. It registers
+# with a file in EXCEPT_DIR named after its app id, one exception a line:
+#   keep <process>     <process> keeps running while its group is off
+#   claim <service>    our stand-in for <service> steps aside for the app
+# Only processes in KEEPABLE can be kept and services in ANSWERED_SERVICES
+# claimed, and only while that app is installed. Each exception is a setting of
+# its own, exception.<app id>:<keep|claim>:<name>, off until the user turns it
+# on, and it counts once applied. A claim is checked while the stand-in runs, so
+# going by the applied settings keeps it in step with the rest. The app removes
+# its file when it no longer needs them, and runs apply after either change.
+EXCEPT_DIR="/var/lib/webosbrew/lifesgoodwithoutspying.exceptions.d"
+# Only homebrew apps can register; a file named after one of LG's apps counts
+# for nothing.
+EXCEPT_APP_DIR="/media/developer/apps/usr/palm/applications"
+# Only voiceinput can be kept: it passes audio to local callers and makes no
+# network calls of its own (checked on webOS 5.4). A TV that splits capture
+# into voiceinput_* helpers loses the microphone rather than keeping more
+# running than was checked.
+KEEPABLE="voiceinput"
+
+# "<app id> <keep|claim> <name>" for each exception an installed app registered.
+# After exception_load, the list read then.
+exception_entries() {
+    if [ -n "${EXCEPT_LOADED:-}" ]; then
+        [ -z "$EXCEPT_ENTRIES" ] || printf '%s\n' "$EXCEPT_ENTRIES"
+        return 0
+    fi
+    exception_scan
+}
+
+# Read the registrations once, for a run that asks for them many times (status,
+# apply). Registrations only count from an apply, so one run can't miss one.
+# Call it from the main shell, after the run's applied settings are in place.
+exception_load() {
+    EXCEPT_ENTRIES="$(exception_scan)"
+    EXCEPT_LOADED=1
+    if applied_on voice.stop && [ -n "$(keepers voiceinput)" ]; then
+        EXCEPT_MIC_KEPT=yes
+    else
+        EXCEPT_MIC_KEPT=no
+    fi
+}
+
+exception_scan() {
+    [ -d "$EXCEPT_DIR" ] || return 0
+    for e_file in "$EXCEPT_DIR"/*; do
+        [ -f "$e_file" ] || continue
+        e_id="${e_file##*/}"
+        case "$e_id" in
+            ''|.*|*[!A-Za-z0-9._-]*) continue ;;
+        esac
+        [ -f "$EXCEPT_APP_DIR/$e_id/appinfo.json" ] || continue
+        while read -r e_kind e_name e_rest || [ -n "$e_kind" ]; do
+            [ -n "$e_name" ] && [ -z "$e_rest" ] || continue
+            case "$e_kind" in
+                keep) e_ok="$KEEPABLE" ;;
+                claim) e_ok="$ANSWERED_SERVICES" ;;
+                *) continue ;;
+            esac
+            case " $e_ok " in
+                *" $e_name "*) echo "$e_id $e_kind $e_name" ;;
+            esac
+        done < "$e_file"
+    done | awk '!seen[$0]++'
+}
+
+# The setting of exception $1 $2 $3 (app id, kind, name).
+exception_key() {
+    echo "exception.$1:$2:$3"
+}
+
+# The settings of every registered exception, one a line.
+exception_keys() {
+    exception_entries | while read -r ek_id ek_kind ek_name; do
+        exception_key "$ek_id" "$ek_kind" "$ek_name"
+    done
+}
+
+# Exit 0 if the last apply had exception $1 $2 $3 on.
+exception_on() {
+    applied_on "$(exception_key "$1" "$2" "$3")"
+}
+
+# Exit 0 if exception $1 $2 $3 is registered and on.
+exception_allowed() {
+    exception_entries | grep -qxF "$1 $2 $3" && exception_on "$1" "$2" "$3"
+}
+
+# The installed apps keeping process $1, one id a line.
+keepers() {
+    exception_entries | while read -r k_id k_kind k_name; do
+        if [ "$k_kind $k_name" = "keep $1" ] && exception_on "$k_id" keep "$1"; then
+            echo "$k_id"
+        fi
+    done
+}
+
+# The title of installed app $1, or its id.
+app_title() {
+    t_title="$(sed -n 's/^[[:space:]]*"title"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$EXCEPT_APP_DIR/$1/appinfo.json" 2>/dev/null | head -n 1)"
+    echo "${t_title:-$1}"
+}
+
+# The titles of the apps keeping process $1, comma-separated.
+keeper_titles() {
+    keepers "$1" | while read -r kt_id; do app_title "$kt_id"; done | awk 'NR > 1 { printf ", " } { printf "%s", $0 } END { print "" }'
+}
+
+# Exit 0 if voiceinput stays up for an app that registered for it, while the
+# rest of the voice group is stopped. Only matters while Voice is on, as last
+# applied.
+voice_mic_kept() {
+    case "${EXCEPT_MIC_KEPT:-}" in
+        yes) return 0 ;;
+        no) return 1 ;;
+    esac
+    applied_on voice.stop && [ -n "$(keepers voiceinput)" ]
+}
 
 # "<name> <path>" for every executable one group targets. Each name gets the
 # canonical directories plus any per-app jail copy, because a process may run
@@ -393,7 +523,10 @@ SERVICE_GROUPS="voice ads thinq lan"
 # copies outside those directories follow.
 group_targets() {
     case "$1" in
-        voice) names="$VOICE_NAMES" ;;
+        voice)
+            names="$VOICE_NAMES"
+            voice_mic_kept || names="voiceinput $names"
+            ;;
         ads) names="$ADS_NAMES" ;;
         thinq) names="$THINQ_NAMES" ;;
         # apply_lan stubs only the host binary, with its own script.
@@ -432,7 +565,8 @@ voice_execs() {
 }
 
 voice_units() {
-    printf '%s\n' voiceinput.service voiceconductor.service
+    voice_mic_kept || echo voiceinput.service
+    echo voiceconductor.service
 }
 
 # Apps to ask the application manager to close. They run inside WebAppMgr, so
@@ -676,6 +810,14 @@ ANSWERED_SERVICES="com.webos.service.admanager com.webos.service.voiceconductor 
 # Token of the current worker for a service, as "<prefix>.<service>"; removing it
 # stops the worker. Companion .pid and .err files sit beside it.
 ANSWER_PREFIX="/tmp/lifesgoodwithoutspying.answer"
+# A service whose name another app answers for, as "<prefix>.<service>", holding
+# "<pid> <start time> <app id>": the pid of the process answering and its start
+# time, field 22 of /proc/<pid>/stat. Our stand-in steps aside while that
+# process lives and the user allows the app's claim (see exception_entries), and
+# comes back by itself after. The real executable stays stubbed either way, so a
+# claim can only replace the stand-in, never bring LG's service back. To claim:
+# write the file, then kill the pid in the "<ANSWER_PREFIX>.<service>.pid" file.
+ANSWER_CLAIM_PREFIX="/tmp/lifesgoodwithoutspying.claim"
 # A run this long counts as working, and clears the count of failed runs.
 ANSWER_HEALTHY_SECONDS=60
 ANSWER_MAX_FAILURES=20
@@ -693,6 +835,35 @@ answered_in() {
         answer_exec_listed "$a_service" "$1" && echo "$a_service"
     done
     return 0
+}
+
+# The start time of process $1, in clock ticks since boot. Its name can hold
+# spaces and parentheses, so fields are counted from the last ")".
+proc_start_time() {
+    sed 's/.*) //' "/proc/$1/stat" 2>/dev/null | cut -d' ' -f20
+}
+
+# Exit 0 if an app answers for service $1 in our stand-in's place, leaving its
+# pid in c_pid and its id in c_app. The claimant must still be the process that
+# wrote the claim, started at the time it gave and running from the app's own
+# folder, so a pid reused after the app exits counts for nothing.
+answer_claimed() {
+    [ -f "$ANSWER_CLAIM_PREFIX.$1" ] && read -r c_pid c_start c_app c_rest < "$ANSWER_CLAIM_PREFIX.$1" || return 1
+    case "$c_pid" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    case "$c_start" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    case "$c_app" in
+        ''|.*|*[!A-Za-z0-9._-]*) return 1 ;;
+    esac
+    [ -z "$c_rest" ] && [ "$(proc_start_time "$c_pid")" = "$c_start" ] || return 1
+    case " $(tr '\000' ' ' 2>/dev/null < "/proc/$c_pid/cmdline") " in
+        *" $EXCEPT_APP_DIR/$c_app/"*) ;;
+        *) return 1 ;;
+    esac
+    exception_allowed "$c_app" claim "$1"
 }
 
 # Exit 0 if the stub for service $1 is running, leaving its pid in a_pid. A pid
@@ -730,6 +901,11 @@ answer_start() {
                 echo "[-] gave up answering for $a_name: $(tail -n 1 "$a_file.err" 2>/dev/null)"
                 exit 0
             fi
+            if answer_claimed "$a_service"; then
+                a_failures=0
+                sleep "$ANSWER_RETRY_SECONDS"
+                continue
+            fi
             a_started="$(uptime_seconds)"
             NODE_PATH=/usr/lib/nodejs node "$DIR/nospy-luna-stub.js" "$a_service" \
                 </dev/null >/dev/null 2>"$a_file.err" &
@@ -742,8 +918,16 @@ answer_start() {
                 kill -KILL "$a_pid" 2>/dev/null
                 exit 0
             fi
+            # Likewise for a claim: the claimant writes it and then reads the pid.
+            if answer_claimed "$a_service"; then
+                kill -KILL "$a_pid" 2>/dev/null
+                wait "$a_pid" 2>/dev/null
+                continue
+            fi
             wait "$a_pid"
-            if [ "$(($(uptime_seconds) - a_started))" -ge "$ANSWER_HEALTHY_SECONDS" ]; then
+            # A claim that ended this run is not a failure.
+            if answer_claimed "$a_service" ||
+                [ "$(($(uptime_seconds) - a_started))" -ge "$ANSWER_HEALTHY_SECONDS" ]; then
                 a_failures=0
             else
                 a_failures=$((a_failures + 1))

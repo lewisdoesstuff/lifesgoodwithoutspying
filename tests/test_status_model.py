@@ -75,6 +75,21 @@ class StatusModelTest(unittest.TestCase):
         # Only saved.<key> lines are settings.
         self.assertNotIn("connman_ipv6", m["saved"])
 
+    def test_kept_process(self):
+        # An app registered to keep voiceinput: still protected, and named.
+        lines = [l for l in BASE if not l.startswith("proc.voice.voiceinput")]
+        m = model(lines + ["kept.voice.voiceinput=Local Voice"])
+        self.assertEqual(m["verdict"], "verdict.protected")
+        self.assertEqual(m["groups"][0][2], "voiceinput:kept")
+        self.assertEqual(m["groups"][0][3], "state.stopped")
+
+    def test_claimed_process(self):
+        # LG's voiceconductor stays stubbed while an app answers for it: its own
+        # dot turns blue and names the app, and it's still protected.
+        m = model(BASE + ["proc.voice.voiceconductor=stopped", "claimed.voice.voiceconductor=Local Voice"])
+        self.assertEqual(m["verdict"], "verdict.protected")
+        self.assertEqual(m["groups"][0][2], "voiceinput:stopped voiceconductor:kept")
+
     def test_running_listed_process_wins(self):
         m = model(edit(saved__ads__stop="on", applied__ads__stop="on"))
         self.assertEqual((m["verdict"], m["why"]), ("verdict.partial", "why.running"))

@@ -18,6 +18,8 @@ echo "==== apply $(date) ===="
 # Record the settings this run applies. Saving a toggle does not apply it, so
 # status compares this copy with the saved settings to report pending changes.
 cat "$CONF" > "$CONF_APPLIED" 2>/dev/null || : > "$CONF_APPLIED"
+# Read the app exceptions once, now that this run's settings are the applied ones.
+exception_load
 
 BLOCKDIR="$DIR/blocklist.d"
 DNS_FILTER_INIT="$DIR/nospy-dns-filter.sh"
@@ -440,8 +442,14 @@ apply_ads() {
     apply_stub_category ads.stop ads_units ads_execs
 }
 
-# Voice services, and the voice app if it is already up.
+# Voice services, and the voice app if it is already up. While an app keeps
+# voiceinput (keepers in nospy-lib.sh) it is outside the category, so its
+# stand-in has to go here, and a unit an earlier apply stopped has to come back
+# here.
 apply_voice() {
+    if voice_mic_kept; then
+        answer_stop com.webos.service.voiceinput
+    fi
     apply_stub_category voice.stop voice_units voice_execs
     if is_on voice.stop; then
         voice_apps > "$APPS_TMP"
@@ -449,6 +457,10 @@ apply_voice() {
             [ -n "$id" ] || continue
             app_close "$id"
         done < "$APPS_TMP"
+    fi
+    if voice_mic_kept && has_unit_manager; then
+        unit_ctl start voiceinput.service
+        echo "[~] voiceinput not stubbed, kept for $(keeper_titles voiceinput)"
     fi
 }
 

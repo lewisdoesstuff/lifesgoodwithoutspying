@@ -17,9 +17,12 @@ window.nospyStatus = (function () {
     //   saved.<key>=on|off     saved settings, which the toggles show
     //   applied.<key>=on|off   the settings the last apply used
     //   proc.<group>.<name>=running|stopped|absent|unknown
+    //   kept.<group>.<name>=<titles>   left running for the apps registered for it
+    //   claimed.<group>.<name>=<title> stubbed, and answered for by that app in
+    //                                  place of our stand-in
     function read(map) {
         var enabled = map.autostart === 'on';
-        var saved = {}, applied = {}, groups = [], byId = {};
+        var saved = {}, applied = {}, groups = [], byId = {}, kept = {};
         Object.keys(map).forEach(function (k) {
             var v = map[k], m;
             if ((m = /^saved\.(.+)$/.exec(k))) {
@@ -27,6 +30,12 @@ window.nospyStatus = (function () {
             }
             else if ((m = /^applied\.(.+)$/.exec(k))) {
                 applied[m[1]] = v === 'on';
+            }
+            else if ((m = /^kept\.([^.]+)\.(.+)$/.exec(k))) {
+                (kept[m[1]] = kept[m[1]] || []).push({ name: m[2], apps: v });
+            }
+            else if ((m = /^claimed\.([^.]+)\.(.+)$/.exec(k))) {
+                (kept[m[1]] = kept[m[1]] || []).push({ name: m[2], apps: v, claimed: true });
             }
             else if ((m = /^proc\.([^.]+)\.(.+)$/.exec(k))) {
                 // Names can contain dots; groups can't.
@@ -38,6 +47,24 @@ window.nospyStatus = (function () {
                 if (v !== 'absent')
                     byId[m[1]].procs.push({ name: m[2], state: v });
             }
+        });
+        // A kept process is one more dot in its group, in use by the apps
+        // registered for it; it is neither running against the setting nor stopped.
+        // A claimed one is LG's process, still stubbed, whose name an app
+        // answers for: its own dot turns into the same kind.
+        Object.keys(kept).forEach(function (id) {
+            if (!byId[id])
+                return;
+            kept[id].forEach(function (k) {
+                var own = k.claimed && byId[id].procs.filter(function (p) { return p.name === k.name; })[0];
+                if (own) {
+                    own.state = 'kept';
+                    own.apps = k.apps;
+                }
+                else {
+                    byId[id].procs.push({ name: k.name, state: 'kept', apps: k.apps });
+                }
+            });
         });
         // Before the first apply there are no applied lines, and nothing is
         // running yet to differ from the saved settings.
@@ -58,6 +85,7 @@ window.nospyStatus = (function () {
             g.saved = g.key ? !!saved[g.key] : true;
             g.live = g.key ? !!live[g.key] : true;
             g.dirty = g.key ? !!dirty[g.key] : false;
+            g.kept = g.live ? kept[g.id] || [] : [];
             g.running = [];
             g.unknown = [];
             g.procs.forEach(function (p) {
@@ -143,6 +171,11 @@ window.nospyStatus = (function () {
             list.push({ key: 'facts.dns' });
         if (model.stopped)
             list.push({ key: 'facts.processes', n: model.stopped });
+        model.groups.forEach(function (g) {
+            (g.kept || []).forEach(function (k) {
+                list.push({ key: k.claimed ? 'facts.claimed' : 'facts.kept', n: k.name, params: { apps: k.apps } });
+            });
+        });
         return list;
     }
 

@@ -88,8 +88,12 @@ selftest_processes() {
 # One selftest line per service that has a stand-in.
 selftest_answering() {
     for service in $ANSWERED_SERVICES; do
-        if answer_running "$service"; then
+        if answer_claimed "$service"; then
+            echo "  ${service##*.} stand-in: stepped aside for $(app_title "$c_app") (pid $c_pid)"
+        elif answer_running "$service"; then
             echo "  ${service##*.} stand-in: answering"
+        elif [ "$service" = com.webos.service.voiceinput ] && voice_mic_kept; then
+            echo "  voiceinput: kept for $(keeper_titles voiceinput), running: $(pidof voiceinput >/dev/null && echo yes || echo no)"
         else
             echo "  ${service##*.} stand-in: stopped"
         fi
@@ -259,6 +263,7 @@ case "$1" in
         conf_get "$2"
         ;;
     status)
+        exception_load
         if [ -L "$LINK" ]; then
             echo "autostart=on"
             # Settings saved since the last apply.
@@ -299,8 +304,36 @@ case "$1" in
         fi
         # Also prints voice= and ads=, which older frontends read.
         proc_states "$TMP.proc"
+        # Processes an app keeps running (see keepers), with the apps' titles.
+        if voice_mic_kept; then
+            echo "kept.voice.voiceinput=$(keeper_titles voiceinput)"
+        fi
+        # Stubbed processes whose service an app answers for (see answer_claimed).
+        for service in $ANSWERED_SERVICES; do
+            answer_claimed "$service" || continue
+            c_name="${service##*.}"
+            case " voiceinput $VOICE_NAMES " in
+                *" $c_name "*) echo "claimed.voice.$c_name=$(app_title "$c_app")" ;;
+                *) case " $ADS_NAMES " in
+                       *" $c_name "*) echo "claimed.ads.$c_name=$(app_title "$c_app")" ;;
+                   esac ;;
+            esac
+        done
+        # Each registered exception (its setting is printed above) with its
+        # app's title, and in_use while it is in effect.
+        exception_entries > "$TMP.exc"
+        while read -r e_id e_kind e_name; do
+            e_key="$(exception_key "$e_id" "$e_kind" "$e_name")"
+            echo "exception_app.$e_key=$(app_title "$e_id")"
+            case "$e_kind" in
+                keep) applied_on voice.stop && exception_on "$e_id" keep "$e_name" && echo "exception_in_use.$e_key=yes" ;;
+                claim) answer_claimed "$e_name" && [ "$c_app" = "$e_id" ] && echo "exception_in_use.$e_key=yes" ;;
+            esac
+        done < "$TMP.exc"
+        rm -f "$TMP.exc"
         ;;
     selftest)
+        exception_load
         # Also keep the report on the TV, so it can be read over SSH or
         # attached to a bug report instead of copied off the screen.
         {

@@ -151,7 +151,7 @@
     function fact(f) {
         var span = make('span');
         span.appendChild(make('i', 'dot ok'));
-        var parts = t(f.key).split('{n}');
+        var parts = t(f.key, f.params).split('{n}');
         span.appendChild(document.createTextNode(parts[0]));
         if (parts.length > 1) {
             span.appendChild(make('b', '', String(f.n)));
@@ -252,7 +252,7 @@
             g.procs.forEach(function (p) {
                 var row = make('span', p.pip);
                 row.appendChild(make('i', 'pip ' + p.pip));
-                row.appendChild(document.createTextNode(p.name));
+                row.appendChild(document.createTextNode(p.pip === 'kept' ? t('proc.kept', { name: p.name, apps: p.apps }) : p.name));
                 procs.appendChild(row);
             });
         });
