@@ -271,7 +271,8 @@ class WorkerTest(unittest.TestCase):
         (self.root / "exceptions.d" / app).write_text(f"claim {self.service}\n", encoding="utf-8")
         if allowed:
             (self.root / "applied").write_text(f"exception.{app}:claim:{self.service}=on\n", encoding="utf-8")
-        claimant = subprocess.Popen([SHELL, str(script)])
+        # Its sleep outlives the kill, so it must not hold this run's output open.
+        claimant = subprocess.Popen([SHELL, str(script)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.addCleanup(claimant.wait)
         self.addCleanup(claimant.kill)
         # Until it has exec'd, the child still has this process's command line.

@@ -91,6 +91,12 @@ class ExceptionsTest(unittest.TestCase):
             self.assertEqual(sh("exception_entries", exceptions={bad: "keep voiceinput\n"},
                                 installed=(bad,)).stdout, "", bad)
 
+    def test_read_once_after_load(self):
+        # A run that loaded the list keeps it, and the answers drawn from it.
+        script = 'exception_load; rm -r "$EXCEPT_DIR"; exception_entries; voice_mic_kept && echo kept'
+        self.assertEqual(sh(script, exceptions=KEPT).stdout.splitlines(), ["%s keep voiceinput" % APP, "kept"])
+        self.assertEqual(sh('exception_load; exception_entries; voice_mic_kept || echo none').stdout, "none\n")
+
     def test_only_homebrew_apps_count(self):
         out = subprocess.run([SHELL, "-c", '. "$LIB"; echo "$EXCEPT_APP_DIR"'],
                              env=dict(os.environ, LIB=str(LIB)), capture_output=True, text=True)
@@ -119,7 +125,15 @@ class KeepersTest(unittest.TestCase):
         self.assertEqual(sh("keepers voiceinput", exceptions=KEPT, installed=()).stdout, "")
 
     def test_does_nothing_while_voice_is_off(self):
-        self.assertNotEqual(sh("voice_mic_kept", exceptions=KEPT, conf="voice.stop=off\n").returncode, 0)
+        self.assertNotEqual(sh("voice_mic_kept", exceptions=KEPT, applied=ON + "voice.stop=off\n").returncode, 0)
+
+    def test_follows_voice_as_applied_not_as_saved(self):
+        # Voice saved off but still applied on: voiceinput stays kept until Apply.
+        self.assertEqual(sh("voice_mic_kept", exceptions=KEPT, conf="voice.stop=off\n").returncode, 0)
+        self.assertNotIn("voiceinput", names(KEPT, conf="voice.stop=off\n"))
+        # Saved on but applied off: nothing to keep yet.
+        self.assertNotEqual(sh("voice_mic_kept", exceptions=KEPT, applied=ON + "voice.stop=off\n",
+                               conf="voice.stop=on\n").returncode, 0)
 
     def test_nothing_is_kept_until_turned_on_and_applied(self):
         # Never applied, applied off, applied without it, saved on but not applied.
@@ -144,10 +158,14 @@ class KeepersTest(unittest.TestCase):
         self.assertIn("voiceinput /usr/sbin/voiceinput\n", sh("group_targets voice").stdout)
 
 
-# A claimant: a process running from the app's folder, as an app's would.
+# A claimant: a process running from the app's folder, as an app's would. Its
+# sleep outlives the kill, so it must not hold the captured output open. Until
+# the child has exec'd, it still has the test shell's command line.
 CLAIMANT = ('mkdir -p "$T/apps/%s/bin"; echo "sleep 30" > "$T/apps/%s/bin/claimant"\n'
-            'sh "$T/apps/%s/bin/claimant" & cpid=$!\n'
-            'sleep 1\n' % (APP, APP, APP))
+            'sh "$T/apps/%s/bin/claimant" >/dev/null 2>&1 & cpid=$!\n'
+            'i=0; until tr "\\000" " " < /proc/$cpid/cmdline 2>/dev/null | grep -q /bin/claimant; do\n'
+            '    i=$((i + 1)); [ $i -lt 250 ] || break; sleep 0.02\n'
+            'done\n' % (APP, APP, APP))
 
 
 class ClaimTest(unittest.TestCase):

@@ -66,6 +66,15 @@ is_on() {
     [ "$(conf_get "$1")" = "on" ]
 }
 
+# Exit 0 if the key was "on" in the last apply (default when unset). Status
+# reads what the TV runs with from here, not from the saved settings, so a
+# change that waits for Apply does not show as if applied.
+applied_on() {
+    a_val="$(awk -v k="$1" 'index($0, k "=") == 1 { v = substr($0, length(k) + 2) }
+        END { print v }' "$CONF_APPLIED" 2>/dev/null)"
+    [ "${a_val:-$(conf_default "$1")}" = "on" ]
+}
+
 # Print every key with the value it has in the given settings file (default
 # when unset), so two files can be compared by what they mean.
 # The file is read once, as status calls this on every poll and a lookup per
@@ -364,7 +373,29 @@ EXCEPT_APP_DIR="/media/developer/apps/usr/palm/applications"
 KEEPABLE="voiceinput"
 
 # "<app id> <keep|claim> <name>" for each exception an installed app registered.
+# After exception_load, the list read then.
 exception_entries() {
+    if [ -n "${EXCEPT_LOADED:-}" ]; then
+        [ -z "$EXCEPT_ENTRIES" ] || printf '%s\n' "$EXCEPT_ENTRIES"
+        return 0
+    fi
+    exception_scan
+}
+
+# Read the registrations once, for a run that asks for them many times (status,
+# apply). Registrations only count from an apply, so one run can't miss one.
+# Call it from the main shell, after the run's applied settings are in place.
+exception_load() {
+    EXCEPT_ENTRIES="$(exception_scan)"
+    EXCEPT_LOADED=1
+    if applied_on voice.stop && [ -n "$(keepers voiceinput)" ]; then
+        EXCEPT_MIC_KEPT=yes
+    else
+        EXCEPT_MIC_KEPT=no
+    fi
+}
+
+exception_scan() {
     [ -d "$EXCEPT_DIR" ] || return 0
     for e_file in "$EXCEPT_DIR"/*; do
         [ -f "$e_file" ] || continue
@@ -401,9 +432,7 @@ exception_keys() {
 
 # Exit 0 if the last apply had exception $1 $2 $3 on.
 exception_on() {
-    awk -v k="$(exception_key "$1" "$2" "$3")" '
-        index($0, k "=") == 1 { v = substr($0, length(k) + 2) }
-        END { exit v != "on" }' "$CONF_APPLIED" 2>/dev/null
+    applied_on "$(exception_key "$1" "$2" "$3")"
 }
 
 # Exit 0 if exception $1 $2 $3 is registered and on.
@@ -432,9 +461,14 @@ keeper_titles() {
 }
 
 # Exit 0 if voiceinput stays up for an app that registered for it, while the
-# rest of the voice group is stopped. Only matters while Voice is on.
+# rest of the voice group is stopped. Only matters while Voice is on, as last
+# applied.
 voice_mic_kept() {
-    is_on voice.stop && [ -n "$(keepers voiceinput)" ]
+    case "${EXCEPT_MIC_KEPT:-}" in
+        yes) return 0 ;;
+        no) return 1 ;;
+    esac
+    applied_on voice.stop && [ -n "$(keepers voiceinput)" ]
 }
 
 # "<name> <path>" for every executable one group targets. Each name gets the

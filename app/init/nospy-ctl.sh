@@ -255,6 +255,7 @@ case "$1" in
         conf_get "$2"
         ;;
     status)
+        exception_load
         if [ -L "$LINK" ]; then
             echo "autostart=on"
             # Settings saved since the last apply.
@@ -316,13 +317,14 @@ case "$1" in
             e_key="$(exception_key "$e_id" "$e_kind" "$e_name")"
             echo "exception_app.$e_key=$(app_title "$e_id")"
             case "$e_kind" in
-                keep) is_on voice.stop && exception_on "$e_id" keep "$e_name" && echo "exception_in_use.$e_key=yes" ;;
+                keep) applied_on voice.stop && exception_on "$e_id" keep "$e_name" && echo "exception_in_use.$e_key=yes" ;;
                 claim) answer_claimed "$e_name" && [ "$c_app" = "$e_id" ] && echo "exception_in_use.$e_key=yes" ;;
             esac
         done < "$TMP.exc"
         rm -f "$TMP.exc"
         ;;
     selftest)
+        exception_load
         # Also keep the report on the TV, so it can be read over SSH or
         # attached to a bug report instead of copied off the screen.
         {

@@ -18,6 +18,8 @@ echo "==== apply $(date) ===="
 # Record the settings this run applies. Saving a toggle does not apply it, so
 # status compares this copy with the saved settings to report pending changes.
 cat "$CONF" > "$CONF_APPLIED" 2>/dev/null || : > "$CONF_APPLIED"
+# Read the app exceptions once, now that this run's settings are the applied ones.
+exception_load
 
 BLOCKDIR="$DIR/blocklist.d"
 DNS_FILTER_INIT="$DIR/nospy-dns-filter.sh"
