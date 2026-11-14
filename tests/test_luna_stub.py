@@ -26,6 +26,13 @@ FAKE_PALMBUS = '''
 if (process.env.HANDLE_ERROR) throw new Error(process.env.HANDLE_ERROR);
 var handles = [];
 function Handle(name, isPublic) {
+    // webOS 26's binding takes (name, appId) and throws on a boolean.
+    if (process.env.HANDLE_TAKES_APP_ID && typeof isPublic === 'boolean') {
+        throw new Error('basic_string::_S_construct null not valid');
+    }
+    if (process.env.HANDLE_ONE_ARG_ERROR && arguments.length < 2) {
+        throw new Error(process.env.HANDLE_ONE_ARG_ERROR);
+    }
     this.name = name; this.isPublic = isPublic; this.methods = []; this.listeners = [];
     handles.push(this);
 }
@@ -109,6 +116,25 @@ class AnswersTest(unittest.TestCase):
         result = run_stub(ADMANAGER, HANDLE_ERROR="name in use")
         self.assertEqual(result.returncode, 1)
         self.assertEqual(result.stderr.strip(), "Error: name in use")
+
+    def test_webos26_binding_gets_one_handle(self):
+        result = run_stub(ADMANAGER, [["/", "getAdid"]], HANDLE_TAKES_APP_ID="1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        handles = json.loads(result.stdout)
+        self.assertEqual(len(handles), 1)
+        self.assertNotIn("isPublic", handles[0])
+        self.assertEqual(handles[0]["methods"], ["/ getAdid"])
+        self.assertEqual(handles[0]["replies"]["/ getAdid"]["IFA"], "00000000-0000-0000-0000-000000000000")
+
+    def test_webos26_failure_to_take_the_name_is_one_line(self):
+        result = run_stub(ADMANAGER, HANDLE_TAKES_APP_ID="1", HANDLE_ONE_ARG_ERROR="name in use")
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stderr.strip(), "Error: name in use")
+
+    def test_older_binding_never_falls_back_to_one_handle(self):
+        # Up to webOS 25 the one-argument form fails, so it must not be tried.
+        handles = json.loads(run_stub(ADMANAGER, HANDLE_ONE_ARG_ERROR="one argument").stdout)
+        self.assertEqual([h["isPublic"] for h in handles], [False, True])
 
 
 WORKER = '''set -u
