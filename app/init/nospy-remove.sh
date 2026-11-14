@@ -42,6 +42,8 @@ fi
 # Give app jails that copied our sink LG's table back.
 jails="$(jail_hosts_sync)"
 [ "$jails" -gt 0 ] 2>/dev/null && echo "[+] /etc/hosts copied into $jails app jail(s)"
+# SDP is reachable again, so AirPlay can check its key as usual.
+mfi_flag_release
 
 # apply stubs executables and stops services; disabling protection should
 # unmount the stubs (including the untracked upnpd one) and turn the services
