@@ -67,16 +67,31 @@ function answer(message) {
 
 // Handle(name, false) is the private bus and Handle(name, true) the public one.
 // System apps call over the first and store apps over the second. Both are
-// needed, and on the TV new Handle(name) with one argument fails.
-var handles = [false, true].map(function (isPublic) {
-    var handle = new palmbus.Handle(name, isPublic);
+// needed, and up to webOS 25 new Handle(name) with one argument fails.
+//
+// webOS 26 (webOS TV 11) changed the binding to Handle(name, appId): a boolean
+// second argument throws "basic_string::_S_construct null not valid", and the
+// one-argument form is the one that works, so there we open just that (#67).
+// Only a failure of the private handle means that: if the private one opens,
+// the public one must too, as before.
+function openHandles() {
+    var privateHandle;
+    try {
+        privateHandle = new palmbus.Handle(name, false);
+    } catch (err) {
+        return [new palmbus.Handle(name)];
+    }
+    return [privateHandle, new palmbus.Handle(name, true)];
+}
+
+var handles = openHandles();
+handles.forEach(function (handle) {
     Object.keys(table).forEach(function (category) {
         Object.keys(table[category]).forEach(function (method) {
             handle.registerMethod(category, method);
         });
     });
     handle.addListener('request', answer);
-    return handle;
 });
 
 // The handles hold the bus connection and the timer keeps the loop alive. The
