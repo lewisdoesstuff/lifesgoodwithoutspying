@@ -525,6 +525,20 @@ apply_lan() {
 # network may not be up yet, so retry in the background for up to 10 minutes.
 # A newer apply or a disable replaces or removes the token, which stops this
 # worker.
+# With SDP blocked, AirPlay's once-a-power-cycle MFi key download can only
+# fail, and waiting on it fails the pairing (#66). See mfi_flag_hold.
+apply_airplay() {
+    if is_on domains.sdp; then
+        if mfi_flag_hold; then
+            echo "[+] AirPlay: skipping the MFi key download that the SDP block would fail"
+        else
+            echo "[-] AirPlay: could not hold $MFI_FLAG; AirPlay pairing may fail"
+        fi
+    else
+        mfi_flag_release
+    fi
+}
+
 apply_clock() {
     if ! is_on clock.ntp; then
         rm -f "$NTP_TOKEN"
@@ -581,6 +595,7 @@ elif [ -f "$DNS_FILTER_STATE" ] && [ -x "$DNS_FILTER_INIT" ]; then
     "$DNS_FILTER_INIT" disable || dns_filter_ok=0
 fi
 apply_clock
+apply_airplay
 apply_ads
 apply_voice
 apply_thinq

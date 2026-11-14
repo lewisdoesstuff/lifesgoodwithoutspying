@@ -229,6 +229,35 @@ jail_hosts_sync() {
     )
 }
 
+# AirPlay and the SDP block (#66). The first AirPlay session after each
+# power-on has airplay ask com.webos.service.mfi to download the TV's MFi key
+# through SDP (sdp_airplay), and touches /tmp/mfi_key_requested so it asks once
+# a power cycle; at power-on mfi removes the file. With SDP blocked the download
+# fails, airplay waits 10 s for it, longer than the sender waits, and pairing
+# fails with "Unable to Connect". The key itself is already on the TV.
+#
+# While SDP is blocked we hold the flag as a directory with our own entry in it:
+# airplay's and mfi's plain rm can't remove a directory, so the key check is
+# skipped, as it would be after a successful first check. Releasing it removes
+# only our entry, and the directory only if nothing else is in it.
+MFI_FLAG="/tmp/mfi_key_requested"
+
+mfi_flag_hold() {
+    [ -L "$MFI_FLAG" ] && return 1
+    # A plain file is airplay's own flag for this power cycle.
+    [ -f "$MFI_FLAG" ] && rm -f "$MFI_FLAG"
+    mkdir -p "$MFI_FLAG" 2>/dev/null && [ ! -L "$MFI_FLAG" ] || return 1
+    touch "$MFI_FLAG/lifesgoodwithoutspying"
+}
+
+mfi_flag_release() {
+    [ -d "$MFI_FLAG" ] && [ ! -L "$MFI_FLAG" ] || return 0
+    [ -e "$MFI_FLAG/lifesgoodwithoutspying" ] || return 0
+    rm -f "$MFI_FLAG/lifesgoodwithoutspying"
+    rmdir "$MFI_FLAG" 2>/dev/null
+    return 0
+}
+
 # Print the state of /etc/hosts: waiting | ours | external | open.
 hosts_state() {
     if hosts_pending; then

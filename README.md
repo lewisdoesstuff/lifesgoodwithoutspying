@@ -187,6 +187,10 @@ rm -f /var/lib/webosbrew/init.d/50-lifesgoodwithoutspying
   The LG Content Store needs SDP: with this category on, the store stops
   opening once the grace period ends (error -102, or `P6.48.SZ` on some
   firmware). Leave it off if you use the store.
+  AirPlay checks the TV's MFi key through SDP the first time it is used after
+  each power-on, and with SDP blocked that check fails the pairing ("Unable to
+  Connect"). While this category is on, protection marks the check as done, so
+  AirPlay uses the key already on the TV.
 - **Clock from NTP** (`clock.ntp`, default off) sets the time from
   `0-2.pool.ntp.org` with a small SNTP client run under the TV's Node, then
   hands it to webOS through `com.webos.service.systemservice/time/setSystemTime`,

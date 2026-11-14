@@ -7,6 +7,9 @@
 # SDP is also used for LG service initialization, device registration and
 # authentication, app metadata, and EULA/notice data. The grace period therefore
 # permits more than clock synchronization.
+#
+# AirPlay's first-use MFi key check also goes through SDP; nospy-apply.sh skips
+# it while this category is on (mfi_flag_hold), or pairing fails.
 rdx2.nextlgsdp.com
 pt.rdx2.nextlgsdp.com
 ibs.nextlgsdp.com
