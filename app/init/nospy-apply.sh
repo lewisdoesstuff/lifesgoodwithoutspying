@@ -177,6 +177,7 @@ schedule_sdp_block() {
             echo "[-] our /etc/hosts sink disappeared during SDP grace period"
         elif [ "$(append_sdp_domains)" -gt 0 ] 2>/dev/null; then
             echo "[+] SDP domains blocked after ${CLOCK_SYNC_DELAY}s clock-sync grace period"
+            refresh_jail_hosts
             if append_sdp_dns_artifact "$token"; then
                 # A filter still waiting for the network loads this list when
                 # it starts, so only a running one needs a reload.
@@ -194,6 +195,13 @@ schedule_sdp_block() {
     pending_pid=$!
     printf '%s %s\n' "$pending_pid" "$token" > "$HOSTS_PENDING"
     echo "[~] SDP blocked after ${CLOCK_SYNC_DELAY}s; other domain blocks are active"
+}
+
+# Jails set up before this run's sink hold an older copy of /etc/hosts.
+refresh_jail_hosts() {
+    jails="$(jail_hosts_sync)"
+    [ "$jails" -gt 0 ] 2>/dev/null && echo "[+] /etc/hosts copied into $jails app jail(s)"
+    return 0
 }
 
 # hosts blocking
@@ -564,6 +572,8 @@ apply_purge() {
 hosts_ok=1
 dns_filter_ok=1
 apply_hosts || hosts_ok=0
+# Whether the sink went up or came off, jails should see what /etc/hosts holds now.
+refresh_jail_hosts
 if [ "$hosts_ok" -eq 1 ]; then
     apply_dns_filter || dns_filter_ok=0
 elif [ -f "$DNS_FILTER_STATE" ] && [ -x "$DNS_FILTER_INIT" ]; then

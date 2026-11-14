@@ -39,6 +39,9 @@ elif hosts_is_mounted; then
 else
     echo "[~] /etc/hosts was not overridden"
 fi
+# Give app jails that copied our sink LG's table back.
+jails="$(jail_hosts_sync)"
+[ "$jails" -gt 0 ] 2>/dev/null && echo "[+] /etc/hosts copied into $jails app jail(s)"
 
 # apply stubs executables and stops services; disabling protection should
 # unmount the stubs (including the untracked upnpd one) and turn the services

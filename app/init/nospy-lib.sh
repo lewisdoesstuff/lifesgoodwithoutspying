@@ -193,6 +193,42 @@ hosts_ours_active() {
     grep -qF "$NOSPY_MARKER" /etc/hosts 2>/dev/null
 }
 
+# LG's jailer copies /etc/hosts into an app's jail when it sets the jail up
+# ("copy /etc/hosts" in /etc/jail_native_*.conf), and the app, chrooted there,
+# reads that copy until its jail is next set up. A jail set up at boot before
+# our sink is mounted, or during the SDP grace period, keeps the older table for
+# as long as the app runs (#68). jail_hosts_sync makes each existing copy what
+# the jailer would copy now: the live /etc/hosts, ours or LG's. It prints how
+# many copies it replaced.
+#
+# A jail's etc belongs to the app's uid, so nothing in it is followed or read:
+# we cd into it and check that we landed where we meant to, make a temporary
+# file there, and rename it over the copy, which replaces a symlink rather than
+# writing through it. Anything but a regular file is left alone. Glasshouse
+# keeps these copies the same way and with the same content, so the two agree.
+JAIL_ROOT="/var/palm/jail"
+JAIL_HOSTS_SRC="/etc/hosts"
+
+jail_hosts_sync() {
+    (
+        j_n=0
+        j_root="$(cd -P "$JAIL_ROOT" 2>/dev/null && pwd -P)" || { echo 0; exit 0; }
+        [ -f "$JAIL_HOSTS_SRC" ] || { echo 0; exit 0; }
+        for j_etc in "$j_root"/*/etc; do
+            cd -P "$j_etc" 2>/dev/null || continue
+            [ "$(pwd -P)" = "$j_etc" ] || continue
+            [ -f hosts ] && [ ! -L hosts ] || continue
+            j_tmp="$(mktemp .hosts.XXXXXX 2>/dev/null)" || continue
+            if cat "$JAIL_HOSTS_SRC" > "$j_tmp" && chmod 644 "$j_tmp" && mv -f "$j_tmp" hosts; then
+                j_n=$((j_n + 1))
+            else
+                rm -f "$j_tmp"
+            fi
+        done
+        echo "$j_n"
+    )
+}
+
 # Print the state of /etc/hosts: waiting | ours | external | open.
 hosts_state() {
     if hosts_pending; then
