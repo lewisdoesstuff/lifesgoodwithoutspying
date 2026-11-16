@@ -473,11 +473,10 @@ EXCEPT_DIR="/var/lib/webosbrew/lifesgoodwithoutspying.exceptions.d"
 # Only homebrew apps can register; a file named after one of LG's apps counts
 # for nothing.
 EXCEPT_APP_DIR="/media/developer/apps/usr/palm/applications"
-# Only voiceinput can be kept: it passes audio to local callers and makes no
-# network calls of its own (checked on webOS 5.4). A TV that splits capture
-# into voiceinput_* helpers loses the microphone rather than keeping more
-# running than was checked.
-KEEPABLE="voiceinput"
+# voiceinput passes audio to local callers. Some TVs use a separate
+# voiceinput_hidraw process to capture Magic Remote audio into a local socket.
+# Each process needs its own exception.
+KEEPABLE="voiceinput voiceinput_hidraw"
 
 # "<app id> <keep|claim> <name>" for each exception an installed app registered.
 # After exception_load, the list read then.
@@ -567,6 +566,10 @@ keeper_titles() {
     keepers "$1" | while read -r kt_id; do app_title "$kt_id"; done | awk 'NR > 1 { printf ", " } { printf "%s", $0 } END { print "" }'
 }
 
+voice_hidraw_kept() {
+    applied_on voice.stop && [ -n "$(keepers voiceinput_hidraw)" ]
+}
+
 # Exit 0 if voiceinput stays up for an app that registered for it, while the
 # rest of the voice group is stopped. Only matters while Voice is on, as last
 # applied.
@@ -599,6 +602,9 @@ group_targets() {
         *) return 1 ;;
     esac
     for name in $names; do
+        if [ "$name" = voiceinput_hidraw ] && voice_hidraw_kept; then
+            continue
+        fi
         for path in "/usr/sbin/$name" "/usr/bin/$name" \
                     /var/palm/jail/*/usr/sbin/"$name" /var/palm/jail/*/usr/bin/"$name"; do
             printf '%s %s\n' "$name" "$path"

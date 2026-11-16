@@ -33,10 +33,9 @@ TVs: ad delivery, Automatic Content Recognition, and always-on voice capture.
   microphone hardware or guarantee that other software cannot access audio;
   target availability and results vary by model and firmware. The remote voice
   key may stop working.
-- Leaves `voiceinput` running while the rest of the voice group stays stopped,
-  for as long as an installed app that runs speech recognition on the TV, such
-  as [Local Voice](https://github.com/haywirephoenix/webos-localvoice), has
-  registered for it. Status names that app.
+- Lets an installed app such as [Local Voice](https://github.com/haywirephoenix/webos-localvoice)
+  request exceptions for `voiceinput` and, on TVs with split remote capture,
+  `voiceinput_hidraw`. The other voice blocks stay active. Status names the app.
 - Bind-mounts an inert stub over each target binary, so the Luna hub cannot
   respawn it (no polling loop).
 - For targets the Luna hub starts inside a jail (`Exec=/usr/bin/jailer ...`,
@@ -220,15 +219,16 @@ rm -f /var/lib/webosbrew/init.d/50-lifesgoodwithoutspying
   three of those service names and answers the calls they need, without reading
   any ID or touching audio; the self-test reports whether each one is running.
   It needs `node` on the TV.
-- **App exceptions.** A homebrew app can ask to keep `voiceinput` running while
-  the rest of the voice group (`voiceconductor`, `nlpmanager`, etc.) stays
-  stubbed, or to answer for a stubbed service in place of our stand-in. Each
-  request is an exception the user turns on, one by one; all start off.
+- **App exceptions.** A homebrew app can ask to keep `voiceinput` and
+  `voiceinput_hidraw` running, or to answer for a stubbed service in place of
+  our stand-in. Each request is an exception the user turns on individually.
+  All exceptions start off.
   - Each one shows in the **Exceptions** tab with the app's name and whether
     it's in use, and a switch to allow it.
   - To register: write a file named `<app_id>` to
     `/var/lib/webosbrew/lifesgoodwithoutspying.exceptions.d/`, one exception a
-    line: `keep voiceinput` or `claim <service>`, then run `nospy-ctl.sh apply`.
+    line. Use `keep voiceinput`, `keep voiceinput_hidraw` or `claim <service>`,
+    then run `nospy-ctl.sh apply`.
     It only counts while that app is installed under
     `/media/developer/apps/usr/palm/applications`.
   - To allow one: `nospy-ctl.sh set exception.<app_id>:<keep|claim>:<name> on`,
