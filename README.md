@@ -36,6 +36,9 @@ TVs: ad delivery, Automatic Content Recognition, and always-on voice capture.
 - Lets an installed app such as [Local Voice](https://github.com/haywirephoenix/webos-localvoice)
   request exceptions for `voiceinput` and, on TVs with split remote capture,
   `voiceinput_hidraw`. The other voice blocks stay active. Status names the app.
+  On the tested webOS 25 firmware, `voiceinput_hidraw` can start a TLS WebSocket
+  server that listens on all IPv4 interfaces, potentially exposing the service
+  to the local network.
 - Bind-mounts an inert stub over each target binary, so the Luna hub cannot
   respawn it (no polling loop).
 - For targets the Luna hub starts inside a jail (`Exec=/usr/bin/jailer ...`,

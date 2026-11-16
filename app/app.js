@@ -288,9 +288,11 @@
             var btn = list.children[i], state = btn.querySelector('.state');
             // A claimed service goes by its last part, as in the self-test.
             var name = e.kind === 'claim' ? e.name.split('.').pop() : e.name;
+            var description = e.kind === 'claim' ? 'exception.claim' : 'exception.keep';
+            if (e.kind === 'keep' && e.name === 'voiceinput_hidraw') description = 'exception.keepHidraw';
             // An app can have several, so each is titled with what it covers.
             setText(btn.querySelector('b'), 'exception.title', { app: e.title, name: name });
-            setText(btn.querySelector('small'), e.kind === 'claim' ? 'exception.claim' : 'exception.keep', { name: name });
+            setText(btn.querySelector('small'), description, { name: name });
             clear(state);
             if (e.inUse) {
                 state.appendChild(make('i', 'pip kept'));
