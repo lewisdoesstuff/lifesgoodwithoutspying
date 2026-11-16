@@ -143,5 +143,40 @@ class StubMountTest(unittest.TestCase):
         self.assertEqual(self.bind(other), ("rc=0", 2, "ads.stop @P@"))
 
 
+# Our sink on /etc/hosts, then another tool's bind over it, which propagation
+# also lands on our sink file (#73, LG B4, webOS 10.3.2).
+HOSTS_OURS = """\
+22 1 253:1 / / ro,relatime shared:1 - squashfs /dev/root ro
+76 22 179:59 / /var/lib/webosbrew rw shared:39 - ext4 /dev/mmcblk0p59 rw
+2008 50 179:59 /var/lib/webosbrew/lifesgoodwithoutspying.hosts /etc/hosts rw shared:39 - ext4 /dev/mmcblk0p59 rw
+"""
+HOSTS_COVERED = HOSTS_OURS + """\
+2866 2008 0:20 /other.hosts /etc/hosts rw shared:5 - tmpfs tmpfs rw
+2870 76 0:20 /other.hosts /var/lib/webosbrew/lifesgoodwithoutspying.hosts rw shared:5 - tmpfs tmpfs rw
+"""
+
+
+class MountTopRootTest(unittest.TestCase):
+    def top(self, info_text, path):
+        with tempfile.TemporaryDirectory() as tmp:
+            info = Path(tmp) / "mountinfo"
+            info.write_text(info_text, encoding="utf-8")
+            out = sh('MOUNTINFO="$M"; mount_top_root "$P"', M=str(info), P=path)
+        self.assertEqual(out.returncode, 0)
+        return out.stdout.strip()
+
+    def test_sink_file_is_not_covered_by_our_own_bind(self):
+        self.assertEqual(self.top(HOSTS_OURS, "/var/lib/webosbrew/lifesgoodwithoutspying.hosts"), "")
+
+    def test_another_bind_over_ours_covers_the_sink_file(self):
+        self.assertEqual(self.top(HOSTS_COVERED, "/var/lib/webosbrew/lifesgoodwithoutspying.hosts"),
+                         "/other.hosts")
+        self.assertEqual(self.top(HOSTS_COVERED, "/etc/hosts"), "/other.hosts")
+
+    def test_unreadable_table_answers_nothing(self):
+        out = sh('MOUNTINFO=/nonexistent/mountinfo; mount_top_root /etc/hosts')
+        self.assertEqual((out.returncode, out.stdout), (0, ""))
+
+
 if __name__ == "__main__":
     unittest.main()
