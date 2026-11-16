@@ -686,6 +686,14 @@ mount_is_shown() {
     mount_is_ours "$1" "$2"
 }
 
+# The root (the file it binds) of the topmost mount at path $1, as the mount
+# table shows it, or nothing when nothing is mounted there or the table can't
+# be read.
+mount_top_root() {
+    [ -r "$MOUNTINFO" ] || return 0
+    awk -v p="$1" '$5 == p { top = $4 } END { if (top != "") print top }' "$MOUNTINFO"
+}
+
 # Unmount our binds at path $1, made from a file whose path ends in $2, down to
 # the first mount that isn't ours, so stacks left by earlier versions come off
 # too. Bounded, in case an unmount keeps failing.

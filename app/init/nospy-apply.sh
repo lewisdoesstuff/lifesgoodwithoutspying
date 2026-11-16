@@ -220,6 +220,17 @@ apply_hosts() {
     pending_hosts_cancel
     unmount_ours
 
+    # Nothing of ours mounts on HOSTS_GEN. When another tool binds its own
+    # table over /etc/hosts on top of our sink, mount propagation lands that
+    # bind on HOSTS_GEN too (#73), so both paths show the other table: the
+    # rebuild below would copy it onto itself, or write into it. Leave both
+    # alone until that mount comes off.
+    covered="$(mount_top_root "$HOSTS_GEN")"
+    if [ -n "$covered" ]; then
+        echo "[-] /etc/hosts sink not rebuilt: another mount ($covered) covers /etc/hosts and $HOSTS_GEN; apply again once it is removed"
+        return 1
+    fi
+
     collect_domains initial > "$DOMAINS_TMP"
     count="$(grep -c . "$DOMAINS_TMP" 2>/dev/null)"
     [ -n "$count" ] || count=0
@@ -602,9 +613,15 @@ apply_thinq
 apply_lan
 apply_purge
 
+failed=0
+if [ "$hosts_ok" -ne 1 ]; then
+    echo "[-] the /etc/hosts sink was not applied"
+    failed=1
+fi
 if [ "$dns_filter_ok" -ne 1 ]; then
     echo "[-] one or more DNS handoff operations failed"
-    exit 1
+    failed=1
 fi
+[ "$failed" -eq 0 ] || exit 1
 
 echo "==== done ===="
