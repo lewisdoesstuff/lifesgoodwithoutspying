@@ -82,3 +82,15 @@ ua.elastic.lgwebostv.com
 us.elastic.lgwebostv.com
 vn.elastic.lgwebostv.com
 za.elastic.lgwebostv.com
+# Macro-region APM hosts (#74; verified resolving 2026-11-16)
+aic.elastic.lgwebostv.com
+eic.elastic.lgwebostv.com
+kic.elastic.lgwebostv.com
+eu.elastic.lgwebostv.com
+# wau.lgtvcommon.com, region-prefixed. Glasshouse blocks it with LG's ad
+# and report hosts (#74); its payload is not documented. Verified resolving
+# 2026-11-16.
+aic.wau.lgtvcommon.com
+eic.wau.lgtvcommon.com
+kic.wau.lgtvcommon.com
+ruc.wau.lgtvcommon.com

@@ -162,3 +162,18 @@ tw.info.lgsmartad.com
 ua.info.lgsmartad.com
 vn.info.lgsmartad.com
 za.info.lgsmartad.com
+# Third-party ad networks and the bare SmartAd apex, from Glasshouse's ad
+# blocker (#74). smartclip-services.com and ibis.lgappstv.com exist but had no
+# address on 2026-11-16.
+lgsmartad.com
+ibis.lgappstv.com
+smartclip.com
+smartclip-services.com
+yumenetworks.com
+# adlogservice posts app and channel use, with the MAC address, here; its
+# config gates it on the general terms only (Glasshouse, #74). Verified
+# resolving 2026-11-16.
+api.adts.lgtvcommon.com
+aic.api.adts.lgtvcommon.com
+eic.api.adts.lgtvcommon.com
+kic.api.adts.lgtvcommon.com

@@ -10,3 +10,14 @@ ad-inserter.alphonso.tv
 config-overlay-ads.alphonso.tv
 # LG Ad Solutions (Alphonso Inc.) current brand
 lgads.tv
+# More Alphonso hosts from Glasshouse's ad blocker (#74). eu-acr86 was seen
+# from a factory-reset TV before its agreements were answered. Verified
+# resolving 2026-11-16.
+eu-acr86.alphonso.tv
+eulacheck.alphonso.tv
+insights.alphonso.tv
+prov.alphonso.tv
+sync.alphonso.tv
+tn.alphonso.tv
+tr.alphonso.tv
+tvads.alphonso.tv
