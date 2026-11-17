@@ -1308,6 +1308,20 @@ upnp_restore() {
     echo "[+] asked com.webos.service.upnp to start upnpd"
 }
 
+# Luna starts the HID helper on demand. Query the device list after its stub
+# is removed, so the remote can capture audio again without a reboot.
+voice_hidraw_restore() {
+    voice_hidraw_kept || return 0
+    h_service=com.webos.service.voiceinput.hidraw
+    [ -f "$LUNA_SERVICE_DIR/$h_service.service" ] || return 0
+    proc_exe_table | grep -q '/voiceinput_hidraw$' && return 0
+    if luna_call "luna://$h_service/getDevices" '{}' >/dev/null; then
+        echo "[+] asked $h_service to start"
+    else
+        echo "[-] could not reach $h_service"
+    fi
+}
+
 # Put back everything the toggles may have stopped: unstub the executables
 # first, then let the units come back up.
 services_restore() {

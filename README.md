@@ -228,6 +228,9 @@ rm -f /var/lib/webosbrew/init.d/50-lifesgoodwithoutspying
   All exceptions start off.
   - Each one shows in the **Exceptions** tab with the app's name and whether
     it's in use, and a switch to allow it.
+  - With **Voice** blocking on, enable and apply Local Voice's `voiceinput`
+    exception and, on TVs with split Magic Remote capture, its
+    `voiceinput_hidraw` exception too.
   - To register: write a file named `<app_id>` to
     `/var/lib/webosbrew/lifesgoodwithoutspying.exceptions.d/`, one exception a
     line. Use `keep voiceinput`, `keep voiceinput_hidraw` or `claim <service>`,

@@ -128,6 +128,33 @@ class KeepersTest(unittest.TestCase):
             if name != "voiceinput_hidraw":
                 self.assertIn(name, kept)
 
+    def test_restore_wakes_only_a_stopped_hid_helper_with_an_applied_exception(self):
+        script = '''
+LUNA_SERVICE_DIR="$T"
+if [ "$SERVICE_PRESENT" = yes ]; then
+    touch "$T/com.webos.service.voiceinput.hidraw.service"
+fi
+proc_exe_table() {
+    printf '%s\\n' '1 /sbin/init' "$HID_PROCESS"
+}
+luna_call() { printf '%s\\n' "$@" >&2; }
+voice_hidraw_restore
+'''
+        enabled = HIDRAW_KEY + "=on\n"
+        for applied, present, process, wakes in (
+            (enabled, "yes", "", True),
+            ("", "yes", "", False),
+            (enabled + "voice.stop=off\n", "yes", "", False),
+            (enabled, "no", "", False),
+            (enabled, "yes", "123 /usr/sbin/voiceinput_hidraw", False),
+        ):
+            with self.subTest(applied=applied, present=present, process=process):
+                out = sh(script, exceptions={APP: "keep voiceinput_hidraw\n"},
+                         conf=enabled, applied=applied, SERVICE_PRESENT=present, HID_PROCESS=process)
+                self.assertEqual(out.returncode, 0, out.stderr)
+                expected = "luna://com.webos.service.voiceinput.hidraw/getDevices\n{}\n" if wakes else ""
+                self.assertEqual(out.stderr, expected)
+
     def test_names_the_app(self):
         self.assertEqual(sh("keepers voiceinput", exceptions=KEPT).stdout.split(), [APP])
         self.assertEqual(sh("keeper_titles voiceinput", exceptions=KEPT).stdout.strip(), "Recogniser")

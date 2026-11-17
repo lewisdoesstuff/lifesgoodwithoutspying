@@ -470,6 +470,7 @@ apply_voice() {
         unit_ctl start voiceinput.service
         echo "[~] voiceinput not stubbed, kept for $(keeper_titles voiceinput)"
     fi
+    voice_hidraw_restore
 }
 
 # ThinQ / Alexa / IoT companions (opt-in through domains.thinq).
