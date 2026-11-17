@@ -30,10 +30,11 @@ UNITS_TMP="/tmp/lifesgoodwithoutspying.units.$$"
 EXECS_TMP="/tmp/lifesgoodwithoutspying.execs.$$"
 SERVICES_TMP="/tmp/lifesgoodwithoutspying.services.$$"
 APPS_TMP="/tmp/lifesgoodwithoutspying.apps.$$"
+FOREIGN_TMP="/tmp/lifesgoodwithoutspying.foreign.$$"
 
 # Scratch files are per-run and multi-megabyte-free, but never cleaned before;
 # remove them however we exit.
-trap 'rm -f "$DOMAINS_TMP" "$KEYS_TMP" "$UNITS_TMP" "$EXECS_TMP" "$SERVICES_TMP" "$APPS_TMP" "$DNS_BLOCKLIST.tmp.$$" "$DNS_BLOCKLIST.sdp.$$"' EXIT
+trap 'rm -f "$DOMAINS_TMP" "$KEYS_TMP" "$UNITS_TMP" "$EXECS_TMP" "$SERVICES_TMP" "$APPS_TMP" "$FOREIGN_TMP" "$DNS_BLOCKLIST.tmp.$$" "$DNS_BLOCKLIST.sdp.$$"' EXIT
 # An untrapped SIGTERM (the job cap's first signal) ends the shell without
 # running the EXIT trap, so turn it into a normal exit.
 trap 'exit 143' INT TERM
@@ -215,6 +216,11 @@ apply_hosts() {
         return 1
     fi
 
+    # Only a sink mounted now can hold another tool's lines: after a reboot the
+    # file is last boot's, and those tools add their lines again.
+    was_ours=0
+    hosts_ours_active && was_ours=1
+
     # Invalidate an older delayed worker, then remove only our previous mount,
     # leaving whatever is underneath.
     pending_hosts_cancel
@@ -231,6 +237,12 @@ apply_hosts() {
         return 1
     fi
 
+    # Lines another tool added to the sink since we mounted it (#78).
+    : > "$FOREIGN_TMP"
+    [ "$was_ours" -eq 1 ] && hosts_foreign_lines "$HOSTS_GEN" "$BLOCKDIR" > "$FOREIGN_TMP"
+    foreign="$(grep -c . "$FOREIGN_TMP" 2>/dev/null)"
+    [ -n "$foreign" ] || foreign=0
+
     collect_domains initial > "$DOMAINS_TMP"
     count="$(grep -c . "$DOMAINS_TMP" 2>/dev/null)"
     [ -n "$count" ] || count=0
@@ -240,9 +252,10 @@ apply_hosts() {
 
     if [ "$count" -eq 0 ] && [ "$sdp_pending" -eq 0 ]; then
         echo "[~] no domain categories enabled; our sink is off"
+        [ "$foreign" -gt 0 ] && echo "[~] $foreign line(s) another tool added to the sink are gone with it"
         write_empty_generated_hosts || echo "[-] failed to write empty generated hosts marker"
         write_dns_artifact "$DOMAINS_TMP" "empty-$generation" || echo "[-] failed to write empty DNS artifact"
-        rm -f "$DOMAINS_TMP" "$KEYS_TMP"
+        rm -f "$DOMAINS_TMP" "$KEYS_TMP" "$FOREIGN_TMP"
         return 0
     fi
 
@@ -255,7 +268,9 @@ apply_hosts() {
             echo "0.0.0.0 $domain"
             echo ":: $domain"
         done < "$DOMAINS_TMP"
+        cat "$FOREIGN_TMP"
     } >> "$HOSTS_GEN"
+    [ "$foreign" -gt 0 ] && echo "[+] kept $foreign line(s) another tool added to /etc/hosts"
 
     # All non-SDP blocks are active immediately. If SDP is enabled, append it
     # to this same mounted inode after the clock-sync grace period.
@@ -272,7 +287,7 @@ apply_hosts() {
     if [ "$sdp_pending" -eq 1 ]; then
         schedule_sdp_block "$generation"
     fi
-    rm -f "$DOMAINS_TMP" "$KEYS_TMP"
+    rm -f "$DOMAINS_TMP" "$KEYS_TMP" "$FOREIGN_TMP"
 }
 
 dns_filter_ipv6_mode() {

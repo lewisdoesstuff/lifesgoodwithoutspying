@@ -195,6 +195,38 @@ hosts_ours_active() {
     grep -qF "$NOSPY_MARKER" /etc/hosts 2>/dev/null
 }
 
+# Print the lines another tool wrote into our sink $1 after we mounted it, so a
+# rebuild can keep them (#78). A boot hook that runs after ours, such as LG App
+# Update Blocker's, appends to /etc/hosts, which is then our sink; rebuilding
+# from the file underneath would drop its lines until the next boot.
+#
+# The sink is the file underneath, then our blocks, each opening with
+# NOSPY_MARKER. Everything before the first marker came from underneath and is
+# copied again anyway. Inside one of our blocks a "0.0.0.0 <host>" or
+# ":: <host>" line for a host in any list under directory $2 is ours; the first
+# other line ends the block, and it and everything up to our next marker belong
+# to someone else. A host that is in our lists but appended by another tool
+# straight after our block, with nothing between, cannot be told from ours and
+# is not kept.
+hosts_foreign_lines() {
+    grep -hv '^[[:space:]]*#' "$2"/*.txt 2>/dev/null | awk -v marker="$NOSPY_MARKER" -v sink="$1" '
+        { sub(/[[:space:]]+$/, ""); if ($0 != "") ours[$0] = 1 }
+        END {
+            # 0: before our first marker, 1: in one of our blocks, 2: foreign.
+            state = 0
+            while ((getline line < sink) > 0) {
+                if (index(line, marker) == 1) { state = 1; continue }
+                if (state == 0) continue
+                if (state == 1) {
+                    if (line == "") continue
+                    if (split(line, f, /[[:space:]]+/) == 2 && (f[1] == "0.0.0.0" || f[1] == "::") && (f[2] in ours)) continue
+                    state = 2
+                }
+                print line
+            }
+        }'
+}
+
 # LG's jailer copies /etc/hosts into an app's jail when it sets the jail up
 # ("copy /etc/hosts" in /etc/jail_native_*.conf), and the app, chrooted there,
 # reads that copy until its jail is next set up. A jail set up at boot before
