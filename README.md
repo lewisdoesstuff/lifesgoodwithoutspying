@@ -20,7 +20,9 @@ TVs: ad delivery, Automatic Content Recognition, and always-on voice capture.
 - Blackholes LG ad / ACR / telemetry domains to loopback by bind-mounting a
   generated `/etc/hosts` (per-category toggles, including separate
   crash/diagnostic, QuickSet, and optional ThinQ / companion, Home
-  app-session and LG Content Store lists).
+  app-session and LG Content Store lists). Lines another tool adds to
+  `/etc/hosts` after the sink is up, such as LG App Update Blocker's, are kept
+  when the sink is rebuilt.
 - Adds a separate LG Service Delivery Platform (SDP) category. Other domain
   blocks apply immediately, while SDP waits 60 seconds at boot so the TV can
   set its clock before those domains are added to the sink.
