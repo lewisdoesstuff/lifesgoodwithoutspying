@@ -148,3 +148,8 @@ ua.lgrecommends.lgappstv.com
 us.lgrecommends.lgappstv.com
 vn.lgrecommends.lgappstv.com
 za.lgrecommends.lgappstv.com
+# LG Shop service, from furkan-bayrak/lg-tv-blocklist and
+# TheShawnMiranda/LG-TV-Ad-Block (#77; verified resolving 2026-11-17)
+lgshopsvc.lgappstv.com
+aic.lgshopsvc.lgappstv.com
+eic.lgshopsvc.lgappstv.com

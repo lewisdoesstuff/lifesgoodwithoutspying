@@ -15,6 +15,7 @@ pt.rdx2.nextlgsdp.com
 ibs.nextlgsdp.com
 ibsstat.nextlgsdp.com
 us.ibs.nextlgsdp.com
+de.ibs.nextlgsdp.com
 gb.nextlgsdp.com
 de.nextlgsdp.com
 ca.nextlgsdp.com

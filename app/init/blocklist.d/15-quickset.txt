@@ -1,3 +1,4 @@
 # UEI QuickSet / remote-control code lookup. Toggle: domains.quickset
 # Kept separate from SmartAd so blocking ads does not disable QuickSet by default.
 www.ueiwsp.com
+ueiwsp.com

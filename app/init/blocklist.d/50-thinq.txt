@@ -54,3 +54,11 @@ ruc-op-lss.lgthinq.com
 ruc.commonpush.lgtviot.com
 ruc.push.lgtviot.com
 ruc.sports.lgtviot.com
+# IoT and ThinQ cluster entry points, from furkan-bayrak/lg-tv-blocklist and
+# TheShawnMiranda/LG-TV-Ad-Block (#77; verified resolving 2026-11-17)
+aic.lgtviot.com
+eic.lgtviot.com
+kic.lgtviot.com
+aic.lgthinq.com
+eic.lgthinq.com
+kic.lgthinq.com

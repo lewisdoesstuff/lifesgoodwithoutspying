@@ -1,0 +1,9 @@
+# LG Gallery+ (art and photo collections, SDX). Toggle: domains.galleryplus
+#
+# Off by default: blocking these breaks Gallery+.
+# Hosts from furkan-bayrak/lg-tv-blocklist and
+# TheShawnMiranda/LG-TV-Ad-Block (#77; verified resolving 2026-11-17)
+lggalleryplus.com
+aic.lggalleryplus.com
+eic.lggalleryplus.com
+kic.lggalleryplus.com

@@ -267,7 +267,17 @@ rm -f /var/lib/webosbrew/init.d/50-lifesgoodwithoutspying
   blocked-name replies carry at most an empty EDNS OPT record, without options
   such as DNS COOKIEs; some clients that require them may retry or fail. See
   `dns-filter/README.md` for details.
-- You don't need the update block option if you've got the option set in the Homebrew Channel.
+- **Firmware/app updates** (`domains.updates`, default off) blocks LG's
+  firmware update servers and the GFTS/NGFTS file-transfer hosts. Those also
+  carry app and content downloads, so app installs and updates may fail while
+  it is on. You don't need it for firmware if you've got the update block set
+  in the Homebrew Channel.
+- **Gallery+** (`domains.galleryplus`, default off) blocks the
+  `*.lggalleryplus.com` hosts, which breaks Gallery+.
+- Some hostnames come from
+  [furkan-bayrak/lg-tv-blocklist](https://github.com/furkan-bayrak/lg-tv-blocklist)
+  (MIT) and [TheShawnMiranda/LG-TV-Ad-Block](https://github.com/TheShawnMiranda/LG-TV-Ad-Block)
+  (#77).
 - Font licences: (Chivo, IBM Plex Mono, OFL: see `app/fonts/`).
 
 ## License

@@ -27,6 +27,7 @@ conf_default() {
         domains.lgchannels) echo off ;;
         domains.updates)    echo off ;;
         domains.thinq)      echo off ;;
+        domains.galleryplus) echo off ;;
         dns.filter)         echo off ;;
         dns.disable_ipv6)   echo off ;;
         voice.stop)         echo on ;;
@@ -117,7 +118,7 @@ conf_keys() {
     printf '%s\n' \
         domains.acr domains.smartad domains.quickset domains.dashboard domains.lgrecommends \
         domains.telemetry domains.sdp clock.ntp domains.lgchannels domains.updates \
-        domains.thinq domains.wiselg dns.filter dns.disable_ipv6 voice.stop ads.stop lan.block purge.boot
+        domains.thinq domains.wiselg domains.galleryplus dns.filter dns.disable_ipv6 voice.stop ads.stop lan.block purge.boot
     exception_keys
 }
 
@@ -126,7 +127,7 @@ domain_keys() {
     printf '%s\n' \
         domains.smartad domains.quickset domains.acr domains.dashboard domains.lgrecommends \
         domains.telemetry domains.sdp domains.lgchannels domains.updates \
-        domains.thinq domains.wiselg
+        domains.thinq domains.wiselg domains.galleryplus
 }
 
 # Map a blocklist category key to its blocklist file name.
@@ -141,6 +142,7 @@ cat_file_for_key() {
         domains.telemetry)  echo "40-telemetry.txt" ;;
         domains.sdp)        echo "45-sdp.txt" ;;
         domains.thinq)      echo "50-thinq.txt" ;;
+        domains.galleryplus) echo "60-galleryplus.txt" ;;
         domains.lgchannels) echo "80-lgchannels.txt" ;;
         domains.updates)    echo "90-updates.txt" ;;
         *)                  echo "" ;;
