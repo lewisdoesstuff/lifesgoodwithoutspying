@@ -177,3 +177,11 @@ api.adts.lgtvcommon.com
 aic.api.adts.lgtvcommon.com
 eic.api.adts.lgtvcommon.com
 kic.api.adts.lgtvcommon.com
+# Country and cluster twins of us.emp and us.lgeapi, from furkan-bayrak/lg-tv-blocklist and
+# TheShawnMiranda/LG-TV-Ad-Block (#77; verified resolving 2026-11-17)
+de.emp.lgsmartplatform.com
+ae.lgeapi.com
+de.lgeapi.com
+aic.lgeapi.com
+eic.lgeapi.com
+kic.lgeapi.com

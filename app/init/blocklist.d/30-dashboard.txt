@@ -129,3 +129,6 @@ tw.rdx2.lgtvsdp.com
 ua.rdx2.lgtvsdp.com
 vn.rdx2.lgtvsdp.com
 za.rdx2.lgtvsdp.com
+# Regional SDP-tree host, from furkan-bayrak/lg-tv-blocklist and
+# TheShawnMiranda/LG-TV-Ad-Block (#77; verified resolving 2026-11-17)
+us.lgtvsdp.com

@@ -1,4 +1,4 @@
-# LG firmware update servers. Toggle: domains.updates
+# LG firmware and app update servers. Toggle: domains.updates
 # Possibly already handled by the Homebrew Channel
 # Blocks any updates (including security patches)
 # But you're rooted, so that's probably for the best ;)
@@ -8,3 +8,26 @@ su-ssl.lge.com
 su-dev.lge.com
 nsu.lge.com
 snu-dev.lge.com
+# File-transfer (GFTS/NGFTS) hosts, from furkan-bayrak/lg-tv-blocklist and
+# TheShawnMiranda/LG-TV-Ad-Block (#77; verified resolving 2026-11-17).
+# These carry firmware and may also carry app and content downloads.
+gfts.lge.com
+aic-gfts.lge.com
+eic-gfts.lge.com
+kic-gfts.lge.com
+ngfts.lge.com
+aic-ngfts.lge.com
+eic-ngfts.lge.com
+kic-ngfts.lge.com
+qt2-ngfts.lge.com
+ngfts.nextlgsdp.com
+aic-ngfts.nextlgsdp.com
+eic-ngfts.nextlgsdp.com
+kic-ngfts.nextlgsdp.com
+aic-gfts.tv.wiselg.com
+eic-gfts.tv.wiselg.com
+kic-gfts.tv.wiselg.com
+ngfts.tv.wiselg.com
+aic-ngfts.tv.wiselg.com
+eic-ngfts.tv.wiselg.com
+kic-ngfts.tv.wiselg.com
