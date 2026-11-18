@@ -308,6 +308,9 @@ case "$1" in
         if voice_mic_kept; then
             echo "kept.voice.voiceinput=$(keeper_titles voiceinput)"
         fi
+        if voice_hidraw_kept; then
+            echo "kept.voice.voiceinput_hidraw=$(keeper_titles voiceinput_hidraw)"
+        fi
         # Stubbed processes whose service an app answers for (see answer_claimed).
         for service in $ANSWERED_SERVICES; do
             answer_claimed "$service" || continue

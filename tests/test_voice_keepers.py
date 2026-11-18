@@ -16,6 +16,7 @@ STAYS_STUBBED = ["voiceconductor", "voiceclick", "nlpmanager", "performer", "voi
 APP = "com.example.recogniser"
 SERVICE = "com.webos.service.voiceconductor"
 KEEP_KEY = "exception.%s:keep:voiceinput" % APP
+HIDRAW_KEY = "exception.%s:keep:voiceinput_hidraw" % APP
 CLAIM_KEY = "exception.%s:claim:%s" % (APP, SERVICE)
 KEPT = {APP: "keep voiceinput\n"}
 CLAIMED = {APP: "claim %s\n" % SERVICE}
@@ -115,6 +116,44 @@ class KeepersTest(unittest.TestCase):
         for name in STAYS_STUBBED:
             self.assertIn(name, kept)
         self.assertEqual(sh("voice_units", exceptions=KEPT).stdout.split(), ["voiceconductor.service"])
+
+    def test_the_remote_capture_helper_requires_its_own_applied_exception(self):
+        registration = {APP: "keep voiceinput\nkeep voiceinput_hidraw\n"}
+        self.assertIn(HIDRAW_KEY, sh("conf_keys", exceptions=registration).stdout.split())
+        self.assertIn("voiceinput_hidraw", names(registration, conf=HIDRAW_KEY + "=on\n"))
+        kept = names(registration, applied=ON + HIDRAW_KEY + "=on\n")
+        self.assertNotIn("voiceinput", kept)
+        self.assertNotIn("voiceinput_hidraw", kept)
+        for name in STAYS_STUBBED:
+            if name != "voiceinput_hidraw":
+                self.assertIn(name, kept)
+
+    def test_restore_wakes_only_a_stopped_hid_helper_with_an_applied_exception(self):
+        script = '''
+LUNA_SERVICE_DIR="$T"
+if [ "$SERVICE_PRESENT" = yes ]; then
+    touch "$T/com.webos.service.voiceinput.hidraw.service"
+fi
+proc_exe_table() {
+    printf '%s\\n' '1 /sbin/init' "$HID_PROCESS"
+}
+luna_call() { printf '%s\\n' "$@" >&2; }
+voice_hidraw_restore
+'''
+        enabled = HIDRAW_KEY + "=on\n"
+        for applied, present, process, wakes in (
+            (enabled, "yes", "", True),
+            ("", "yes", "", False),
+            (enabled + "voice.stop=off\n", "yes", "", False),
+            (enabled, "no", "", False),
+            (enabled, "yes", "123 /usr/sbin/voiceinput_hidraw", False),
+        ):
+            with self.subTest(applied=applied, present=present, process=process):
+                out = sh(script, exceptions={APP: "keep voiceinput_hidraw\n"},
+                         conf=enabled, applied=applied, SERVICE_PRESENT=present, HID_PROCESS=process)
+                self.assertEqual(out.returncode, 0, out.stderr)
+                expected = "luna://com.webos.service.voiceinput.hidraw/getDevices\n{}\n" if wakes else ""
+                self.assertEqual(out.stderr, expected)
 
     def test_names_the_app(self):
         self.assertEqual(sh("keepers voiceinput", exceptions=KEPT).stdout.split(), [APP])

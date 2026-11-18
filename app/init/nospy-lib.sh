@@ -507,11 +507,10 @@ EXCEPT_DIR="/var/lib/webosbrew/lifesgoodwithoutspying.exceptions.d"
 # Only homebrew apps can register; a file named after one of LG's apps counts
 # for nothing.
 EXCEPT_APP_DIR="/media/developer/apps/usr/palm/applications"
-# Only voiceinput can be kept: it passes audio to local callers and makes no
-# network calls of its own (checked on webOS 5.4). A TV that splits capture
-# into voiceinput_* helpers loses the microphone rather than keeping more
-# running than was checked.
-KEEPABLE="voiceinput"
+# voiceinput passes audio to local callers. Some TVs use a separate
+# voiceinput_hidraw process to capture Magic Remote audio into a local socket.
+# Each process needs its own exception.
+KEEPABLE="voiceinput voiceinput_hidraw"
 
 # "<app id> <keep|claim> <name>" for each exception an installed app registered.
 # After exception_load, the list read then.
@@ -601,6 +600,10 @@ keeper_titles() {
     keepers "$1" | while read -r kt_id; do app_title "$kt_id"; done | awk 'NR > 1 { printf ", " } { printf "%s", $0 } END { print "" }'
 }
 
+voice_hidraw_kept() {
+    applied_on voice.stop && [ -n "$(keepers voiceinput_hidraw)" ]
+}
+
 # Exit 0 if voiceinput stays up for an app that registered for it, while the
 # rest of the voice group is stopped. Only matters while Voice is on, as last
 # applied.
@@ -633,6 +636,9 @@ group_targets() {
         *) return 1 ;;
     esac
     for name in $names; do
+        if [ "$name" = voiceinput_hidraw ] && voice_hidraw_kept; then
+            continue
+        fi
         for path in "/usr/sbin/$name" "/usr/bin/$name" \
                     /var/palm/jail/*/usr/sbin/"$name" /var/palm/jail/*/usr/bin/"$name"; do
             printf '%s %s\n' "$name" "$path"
@@ -1342,6 +1348,20 @@ upnp_restore() {
     upnp_running && return 0
     luna_call luna://com.webos.service.upnp/com/palm/luna/private/ping '{}' >/dev/null
     echo "[+] asked com.webos.service.upnp to start upnpd"
+}
+
+# Luna starts the HID helper on demand. Query the device list after its stub
+# is removed, so the remote can capture audio again without a reboot.
+voice_hidraw_restore() {
+    voice_hidraw_kept || return 0
+    h_service=com.webos.service.voiceinput.hidraw
+    [ -f "$LUNA_SERVICE_DIR/$h_service.service" ] || return 0
+    proc_exe_table | grep -q '/voiceinput_hidraw$' && return 0
+    if luna_call "luna://$h_service/getDevices" '{}' >/dev/null; then
+        echo "[+] asked $h_service to start"
+    else
+        echo "[-] could not reach $h_service"
+    fi
 }
 
 # Put back everything the toggles may have stopped: unstub the executables
