@@ -2,17 +2,17 @@
 <p>A webOS homebrew app that switches off the surveillance stack on rooted LG TVs: ad delivery, Automatic Content Recognition, and always-on voice capture.</p>
 <h2>Features</h2>
 <ul>
-<li>Blackholes LG ad / ACR / telemetry domains to loopback by bind-mounting a generated /etc/hosts (per-category toggles, including separate crash/diagnostic, QuickSet, and optional ThinQ / companion, Home app-session and LG Content Store lists).</li>
+<li>Blocks LG ad, ACR, and telemetry domains by bind-mounting a generated /etc/hosts that maps them to loopback, with per-category toggles (including crash/diagnostic reporting, QuickSet, and optional lists for ThinQ / companion services, Home app sessions, and the LG Content Store).</li>
 <li>Keeps UEI QuickSet remote-code lookup available by default; an optional QuickSet toggle can block it.</li>
-<li>Delays blocking LG Service Delivery Platform (SDP) clock hosts for 60 seconds, while applying all other domain blocks immediately, so webOS can set its clock first.</li>
-<li>Optionally routes ConnMan IPv4 DNS through a reversible local filter using the same marked domain list; when the filter is enabled, a separate companion switch can disable ConnMan IPv6 for strict DNS coverage.</li>
-<li>Stops the on-TV ad, ACR and telemetry daemons (admanager, livepick, acr2, nudge, rdxd, uploadd, sportsalarm).</li>
+<li>Delays blocking LG Service Delivery Platform (SDP) clock hosts for 60 seconds, while applying all other domain blocks immediately, so that webOS can set its clock first.</li>
+<li>Optionally routes ConnMan's IPv4 DNS through a reversible local filter that uses the same domain blocklist. When the filter is enabled, a separate switch can also disable IPv6 in ConnMan for stricter DNS coverage.</li>
+<li>Stops the on-TV ad, ACR, and telemetry daemons (admanager, livepick, acr2, nudge, rdxd, uploadd, sportsalarm).</li>
 <li>Stops the LG voice and NLP services (voiceinput, voiceconductor, nlpmanager, performer) and the voice app.</li>
-<li>Bind-mounts an inert stub over each target binary, so the Luna hub cannot respawn it (no polling loop).</li>
-<li>Answers calls to admanager, voiceconductor and voiceinput with a small stand-in, so apps and Settings don't hang waiting on them.</li>
+<li>Bind-mounts an inert stub over each target binary so that the Luna hub cannot respawn it, without needing a polling loop.</li>
+<li>Answers calls to admanager, voiceconductor, and voiceinput with a small stand-in so that apps and Settings don't hang waiting on them.</li>
 <li>With the ThinQ / companion toggle on, also stops the assistant and IoT daemons (trigger_thinq, trigger_alexa, iot-client, iot-proxy).</li>
-<li>Disabling protection puts the stopped services and the UPnP/SSDP daemons back, rather than leaving them down until a reboot.</li>
-<li>Optionally swaps /usr/sbin/upnpd for an inert stub, killing UPnP discovery both ways (breaks casting to the TV too).</li>
+<li>Disabling protection restores the stopped services and the UPnP/SSDP daemons, rather than leaving them down until a reboot.</li>
+<li>Optionally swaps /usr/sbin/upnpd for an inert stub, killing UPnP discovery both ways (which also breaks casting to the TV).</li>
 <li>Wipes locally buffered ACR / speech-to-text files.</li>
 <li>Re-applies everything at boot through a Homebrew Channel init.d hook.</li>
 </ul>
@@ -23,4 +23,4 @@
 <li>Tested on webOS 4.4+</li>
 </ul>
 <h2>Uninstall</h2>
-<p>Select "Disable protection" in the app before you uninstall it. Uninstalling alone leaves protection on until the next reboot. Settings stay in /var/lib/webosbrew/ either way; the README says how to remove them.</p>
+<p>Select "Disable protection" in the app before you uninstall it. Uninstalling alone leaves protection on until the next reboot. Settings stay in /var/lib/webosbrew/ either way; the README explains how to remove them.</p>
